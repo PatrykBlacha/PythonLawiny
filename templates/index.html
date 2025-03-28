@@ -1,33 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
     <meta charset="utf-8" />
-    <title>Mapa Turystyczna</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css" integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js" integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg=" crossorigin=""></script>
-    <style>
-        #map {
-            width: 100%;
-            height: 500px;
-        }
-    </style>
+    <title>Mapa Turystyczna - Strona Główna</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Mapa Turystyczna</h1>
-    <div id="map"></div>
-    <script>
-        // Inicjalizacja mapy
-        var map = L.map('map').setView([49.231556, 19.981972], 13); // Kasprowy Wierch, zoom: 13
+    <header>
+        <h1>Mapa Turystyczna</h1>
+    </header>
+    <nav>
+        <a href="/">Strona główna</a>
+        <a href="/mapa">Mapa</a>
+        <a href="/pogoda">Pogoda</a>
+        <a href="/o-nas">O nas</a>
+        <a href="/kontakt">Kontakt</a>
+    </nav>
+    <main>
+        <section id="home" class="intro">
+            <h2>Witamy na stronie Mapa Turystyczna!</h2>
+            <p>
+                Nasz projekt ma na celu ułatwienie planowania wycieczek w góry i na szlaki turystyczne.
+                Znajdziesz tutaj interaktywną mapę, aktualne informacje o pogodzie oraz przewodnik
+                po najlepszych trasach i atrakcjach. Skorzystaj z naszych zasobów, aby lepiej zaplanować
+                swoje przygody!
+            </p>
+        </section>
 
-        // Dodanie warstwy mapy OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // Dodanie markera na Kasprowym Wierchu
-        var marker = L.marker([49.231556, 19.981972]).addTo(map);
-        marker.bindPopup('<b>Kasprowy Wierch</b><br>Jedno z najpopularniejszych miejsc w Tatrach.').openPopup();
-    </script>
+        <!--TO wrzuciłem tylko poglądowo żeby było widać jak to wyświetlać później -->
+        <section id="weather">
+            <h2>Aktualna Pogoda</h2>
+            <div class="weather">
+                <p><strong>Temperatura:</strong> 15°C</p>
+                <p><strong>Warunki:</strong> Słonecznie</p>
+                <p><strong>Wiatr:</strong> 10 km/h</p>
+                <!-- TUTAJ API POGODOWE -->
+            </div>
+        </section>
+        <section id="links">
+            <div class="section-link">
+                <a href="/mapa">Przejdź do Mapy</a>
+            </div>
+            <div class="section-link">
+                <a href="/pogoda">Sprawdź Szczegółową Prognozę Pogody</a>
+            </div>
+            <div class="section-link">
+                <a href="/o-nas">Dowiedz się Więcej O Nas</a>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>Tu coś pewnie trzeba napisać </p>
+    </footer>
 </body>
 </html>
