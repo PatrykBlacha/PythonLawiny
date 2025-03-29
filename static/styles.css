@@ -97,3 +97,105 @@ footer {
     margin-top: 20px;
     font-size: 0.9rem;
 }
+
+/* Styl sekcji z przyciskami logowania i rejestracji */
+#home header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Styl przycisków logowania i rejestracji */
+.auth-btn {
+    text-decoration: none;
+    color: white;
+    background-color: #4CAF50;
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    border-radius: 8px;
+    margin: 10px; /* Odstęp między przyciskami */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+/* Efekt hover */
+.auth-btn:hover {
+    background-color: #45a049;
+    transform: scale(1.05);
+}
+
+/* Efekt aktywacji (kliknięcie) */
+.auth-btn:active {
+    transform: scale(1);
+}
+
+/* Styl dla sekcji linków */
+.section-link {
+    display: inline-block;
+}
+
+/* Margines dolny dla intro, aby oddzielić od przycisków */
+.intro {
+    margin-bottom: 40px;
+}
+
+/* Styl dla formularza logowania i rejestracji */
+form {
+    max-width: 400px; /* Szerokość formularza */
+    margin: 0 auto; /* Wyśrodkowanie formularza */
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Styl dla inputów w formularzu */
+form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+form input:focus {
+    border-color: #4CAF50;
+    outline: none;
+}
+
+/* Styl dla przycisku formularza */
+form button {
+    width: 100%;
+    padding: 12px;
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+form button:hover {
+    background-color: #45a049;
+}
+
+/* Linki na dole formularza */
+form a {
+    display: block;
+    text-align: center;
+    margin-top: 15px;
+    color: #4CAF50;
+    text-decoration: none;
+    font-size: 1rem;
+}
+
+form a:hover {
+    text-decoration: underline;
+}
+button{
+    color: #4CAF50;
+    text-align: center;
+    left: 50%;
+}
