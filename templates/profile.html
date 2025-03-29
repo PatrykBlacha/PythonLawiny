@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Twój profil</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>Twój profil</header>
+    <p>Twoja nazwa użytkownika: {{ user.username }}!</p>
+    <a href="{{ url_for('logout') }}">Wyloguj się</a>
+</body>
+</html>

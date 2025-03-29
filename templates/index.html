@@ -9,6 +9,14 @@
 <body>
     <header>
         <h1>Mapa Turystyczna</h1>
+        <div class="auth-buttons">
+            {% if current_user.is_authenticated %}
+                <a href="/profile" class="auth-btn">Profil</a>
+            {% else %}
+                <a href="/login" class="auth-btn">Zaloguj się</a>
+                <a href="/register" class="auth-btn">Zarejestruj się</a>
+            {% endif %}
+        </div>
     </header>
     <nav>
         <a href="/">Strona główna</a>
@@ -19,14 +27,7 @@
     </nav>
     <main>
         <section id="home" class="intro">
-            <header>Witamy na stronie Mapa Turystyczna!
-                <div class="section-link">
-                    <a href="/login" class="auth-btn">Zaloguj się</a>
-                </div>
-                <div class="section-link">
-                    <a href="/register" class="auth-btn">Zarejestruj się</a>
-                </div>
-            </header>
+            <h2>Witamy na stronie Mapa Turystyczna!</h2>
             <p>
                 Nasz projekt ma na celu ułatwienie planowania wycieczek w góry i na szlaki turystyczne.
                 Znajdziesz tutaj interaktywną mapę, aktualne informacje o pogodzie oraz przewodnik
@@ -35,14 +36,12 @@
             </p>
         </section>
 
-        <!--TO wrzuciłem tylko poglądowo żeby było widać jak to wyświetlać później -->
         <section id="weather">
             <h2>Aktualna Pogoda</h2>
             <div class="weather">
                 <p><strong>Temperatura:</strong> 15°C</p>
                 <p><strong>Warunki:</strong> Słonecznie</p>
                 <p><strong>Wiatr:</strong> 10 km/h</p>
-                <!-- TUTAJ API POGODOWE -->
             </div>
         </section>
         <section id="links">
