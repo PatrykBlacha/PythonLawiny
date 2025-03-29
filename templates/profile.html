@@ -3,11 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <title>Twój profil</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <header>Twój profil</header>
-    <p>Twoja nazwa użytkownika: {{ user.username }}!</p>
-    <a href="{{ url_for('logout') }}">Wyloguj się</a>
+    <header>
+        <h1>Mapa Turystyczna</h1>
+        <div class="auth-buttons">
+            {% if current_user.is_authenticated %}
+                <a href="/profile" class="auth-btn">Profil</a>
+            {% else %}
+                <a href="/login" class="auth-btn">Zaloguj się</a>
+                <a href="/register" class="auth-btn">Zarejestruj się</a>
+            {% endif %}
+        </div>
+    </header>
+    <nav>
+        <a href="/">Strona główna</a>
+        <a href="/mapa">Mapa</a>
+        <a href="/pogoda">Pogoda</a>
+        <a href="/o-nas">O nas</a>
+        <a href="/kontakt">Kontakt</a>
+    </nav>
+    <div class="profile-container">
+        <h1>Twój profil użytkowinka</h1>
+        <p>Nazwa użytkownika: {{ user.username }}!</p>
+        <a href="{{ url_for('logout') }}" class="logout-btn">Wyloguj się</a>
+    </div>
 </body>
 </html>

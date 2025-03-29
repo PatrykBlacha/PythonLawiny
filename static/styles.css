@@ -221,3 +221,136 @@ button{
 .auth-btn:hover {
     background-color: #45a049;
 }
+
+/* Styl strony profilu */
+.profile-container {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+/* Nagłówek profilu */
+.profile-container h1 {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+/* Przycisk wylogowania */
+.logout-btn {
+    display: inline-block;
+    padding: 12px 20px;
+    margin-top: 20px;
+    background-color: #e74c3c;
+    color: white;
+    font-size: 1.2rem;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.logout-btn:hover {
+    background-color: #c0392b;
+    transform: scale(1.05);
+}
+
+.logout-btn:active {
+    transform: scale(1);
+}
+
+/* Styl dla strony rejestracji */
+.register-container {
+    max-width: 400px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+/* Nagłówek rejestracji */
+.register-container h2 {
+    font-size: 2rem;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+/* Styl dla formularza rejestracji */
+.register-container form {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Styl dla inputów */
+.register-container input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.register-container input:focus {
+    border-color: #4CAF50;
+    outline: none;
+}
+
+/* Styl dla przycisku rejestracji */
+.register-container button {
+    width: 100%;
+    padding: 12px;
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.register-container button:hover {
+    background-color: #45a049;
+}
+
+/* Link do logowania */
+.register-container .login-link {
+    display: block;
+    text-align: center;
+    margin-top: 15px;
+    color: #4CAF50;
+    text-decoration: none;
+    font-size: 1rem;
+}
+
+.register-container .login-link:hover {
+    text-decoration: underline;
+}
+
+/* Przycisk logowania jako link */
+.register-container .login-btn {
+    display: inline-block;
+    padding: 12px 20px;
+    margin-top: 10px;
+    background-color: #2196F3;
+    color: white;
+    font-size: 1rem;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.register-container .login-btn:hover {
+    background-color: #1976D2;
+    transform: scale(1.05);
+}
+
+.register-container .login-btn:active {
+    transform: scale(1);
+}
