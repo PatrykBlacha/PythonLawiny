@@ -1,7 +1,9 @@
-from flask import Flask, render_template, redirect, url_for, request, flash
+import requests
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
+from flask_cors import CORS
 
 from weather import *
 from weather_locations import locations
@@ -14,6 +16,7 @@ bcrypt = Bcrypt(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+CORS(app)
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -33,6 +36,36 @@ def home():
 @app.route("/mapa")
 def mapa():
     return render_template("mapa.html")
+
+@app.route("/search_peak", methods=["GET"])
+def search_peak():
+    peak_name = request.args.get("q")  # Pobranie nazwy szczytu z zapytania użytkownika
+
+    if not peak_name:
+        return jsonify({"error": "Brak nazwy szczytu"}), 400
+
+    # Wysłanie zapytania do Nominatim API
+    url = f"https://nominatim.openstreetmap.org/search?format=json&q={peak_name}&featuretype=peak"
+    headers = {"User-Agent": "YourAppName/1.0 (your@email.com)"}  # Ustal własnego user-agenta
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return jsonify({"error": "Błąd połączenia z Nominatim API"}), 500
+
+    data = response.json()
+
+    if not data:
+        return jsonify({"error": "Nie znaleziono szczytu"}), 404
+
+    # Pobranie pierwszego wyniku
+    result = {
+        "name": peak_name,
+        "lat": data[0]["lat"],
+        "lon": data[0]["lon"]
+    }
+
+    return jsonify(result)
 
 @app.route("/pogoda/<location>")
 def weather(location):

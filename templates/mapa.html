@@ -17,6 +17,8 @@
         <a href="/o-nas">O nas</a>
         <a href="/kontakt">Kontakt</a>
     </nav>
+    <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
+    <button onclick="searchPeak()">Szukaj</button>
     <div id="map"></div>
     <script>
         // Inicjalizacja mapy
@@ -30,6 +32,36 @@
         // Dodanie markera na Kasprowym Wierchu
         var marker = L.marker([49.231556, 19.981972]).addTo(map);
         marker.bindPopup('<b>Kasprowy Wierch</b><br>Jedno z najpopularniejszych miejsc w Tatrach.').openPopup();
+
+
+        function searchPeak() {
+            var peakName = document.getElementById('search-box').value;
+            if (!peakName) {
+                alert("Proszę wpisać nazwę szczytu.");
+                return;
+            }
+
+            // Wysłanie zapytania do backendu
+            fetch(`/search_peak?q=${encodeURIComponent(peakName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    // Przesunięcie mapy na znaleziony szczyt
+                    map.setView([data.lat, data.lon], 13);
+
+                    // Dodanie markera
+                    var marker = L.marker([data.lat, data.lon]).addTo(map);
+                    marker.bindPopup(`<b>${data.name}</b>`).openPopup();
+                })
+                .catch(error => {
+                    console.error('Błąd:', error);
+                    alert("Wystąpił błąd podczas wyszukiwania.");
+                });
+        }
     </script>
 </body>
 </html>
