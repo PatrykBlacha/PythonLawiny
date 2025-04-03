@@ -11,7 +11,6 @@ def show_database_status():
         else:
             print("Brak użytkowników w bazie danych.")
 
-        # Możesz także sprawdzić liczbę tabel w bazie
         from sqlalchemy import inspect
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
