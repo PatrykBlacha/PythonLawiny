@@ -3,6 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
 
+from weather import *
+from weather_locations import locations
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'  # Plik bazy danych
 app.config['SECRET_KEY'] = 'tajny_klucz'  # Zmień na bezpieczny klucz
@@ -24,13 +27,24 @@ def load_user(user_id):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    t, cc, w,sd = current_weather(49.2319,19.9817)
+    return render_template("index.html",temperature=round(t,2),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
 
 @app.route("/mapa")
 def mapa():
     return render_template("mapa.html")
 
+@app.route("/pogoda/<location>")
+def weather(location):
+    location = location.replace("_", " ")
+    latitude,longitude=locations.get(location)
+    forecast=forecast_3days(latitude,longitude)
+    temperature=get_forecast_plots(latitude,longitude)
+    wind=wind_plot(latitude,longitude)
+    t, cc, w, sd = current_weather(latitude,longitude)
 
+    return render_template("weather.html",temperature=round(t, 2), cloud_cover=round(cc, 2), wind=round(w, 2),
+                           snow_depth=round(sd*100, 2),temperature_=temperature,wind_=wind,location=location,locations=locations,forecast=forecast,latitude=latitude,longitude=longitude)
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":

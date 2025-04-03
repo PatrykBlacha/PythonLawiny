@@ -354,3 +354,55 @@ button{
 .register-container .login-btn:active {
     transform: scale(1);
 }
+
+/* Styl dla rozwijanego menu */
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+/* Link "Pogoda" w nawigacji */
+.dropdown > a {
+    color: white;
+    padding: 14px 20px;
+    text-decoration: none;
+    display: block;
+    background-color: #333;
+}
+
+/* Ukryta lista lokalizacji */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    left: 0;
+    background-color: #333;
+    min-width: 200px;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+}
+
+/* Linki w rozwijanym menu */
+.dropdown-content a {
+    color: white;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    border-bottom: 1px solid #575757;
+    transition: background-color 0.3s ease;
+}
+
+/* Ostatni link bez dolnej krawędzi */
+.dropdown-content a:last-child {
+    border-bottom: none;
+}
+
+/* Efekt hover na linkach w rozwijanym menu */
+.dropdown-content a:hover {
+    background-color: #575757;
+}
+
+/* Wyświetlenie menu po najechaniu myszką */
+.dropdown:hover .dropdown-content {
+    display: block;
+}

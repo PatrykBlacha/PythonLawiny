@@ -18,13 +18,28 @@
             {% endif %}
         </div>
     </header>
+<!--    <nav>-->
+<!--        <a href="/">Strona główna</a>-->
+<!--        <a href="/mapa">Mapa</a>-->
+<!--        <a href="/pogoda">Pogoda</a>-->
+<!--        <a href="/o-nas">O nas</a>-->
+<!--        <a href="/kontakt">Kontakt</a>-->
+<!--    </nav>-->
     <nav>
         <a href="/">Strona główna</a>
         <a href="/mapa">Mapa</a>
-        <a href="/pogoda">Pogoda</a>
+        <div class="dropdown">
+            <a href="#" id="weather-toggle">Pogoda </a>
+            <div class="dropdown-content" id="weather-menu">
+                {% for name, coords in locations.items() %}
+                    <a href="/pogoda/{{ name|replace(' ', '_') }}">{{ name }}</a>
+                {% endfor %}
+            </div>
+        </div>
         <a href="/o-nas">O nas</a>
         <a href="/kontakt">Kontakt</a>
     </nav>
+
     <main>
         <section id="home" class="intro">
             <h2>Witamy na stronie Mapa Turystyczna!</h2>
@@ -36,14 +51,24 @@
             </p>
         </section>
 
-        <section id="weather">
-            <h2>Aktualna Pogoda</h2>
-            <div class="weather">
-                <p><strong>Temperatura:</strong> 15°C</p>
-                <p><strong>Warunki:</strong> Słonecznie</p>
-                <p><strong>Wiatr:</strong> 10 km/h</p>
-            </div>
-        </section>
+<!--        <section id="weather">-->
+<!--            <h2>Aktualna Pogoda</h2>-->
+<!--            <div class="weather">-->
+<!--                <p><strong>Temperatura:</strong> 15°C</p>-->
+<!--                <p><strong>Warunki:</strong> Słonecznie</p>-->
+<!--                <p><strong>Wiatr:</strong> 10 km/h</p>-->
+<!--            </div>-->
+<!--        </section>-->
+            <section id="weather">
+                <h2>Aktualna Pogoda - Kasprowy Wierch</h2>
+                <div class="weather">
+                    <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                    <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}</p>
+                    <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                    <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+                </div>
+            </section>
+
     </main>
     <footer>
         <p>Tu coś pewnie trzeba napisać </p>
