@@ -406,3 +406,32 @@ button{
 .dropdown:hover .dropdown-content {
     display: block;
 }
+
+.search-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 15px 0;
+    gap: 10px;
+    border-radius: 4px;
+}
+
+#search-box {
+    padding: 8px;
+    font-size: 14px;
+    width: 250px;
+    border-radius: 4px;
+}
+
+#search-button {
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #4CAF50;
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+#search-button:hover {
+    background: #45a049;
+}

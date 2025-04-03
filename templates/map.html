@@ -9,30 +9,40 @@
     <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js" integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg=" crossorigin=""></script>
 </head>
 <body>
-    <header>Mapa Turystyczna</header>
+    <header>
+        <h1>Mapa Turystyczna</h1>
+        <div class="auth-buttons">
+            {% if current_user.is_authenticated %}
+                <a href="/profile" class="auth-btn">Profil</a>
+            {% else %}
+                <a href="/login" class="auth-btn">Zaloguj się</a>
+                <a href="/register" class="auth-btn">Zarejestruj się</a>
+            {% endif %}
+        </div>
+    </header>
     <nav>
         <a href="/">Strona główna</a>
-        <a href="/mapa">Mapa</a>
+        <a href="/map">Mapa</a>
         <a href="/pogoda">Pogoda</a>
         <a href="/o-nas">O nas</a>
         <a href="/kontakt">Kontakt</a>
     </nav>
-    <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
-    <button onclick="searchPeak()">Szukaj</button>
+    <div class="search-container">
+        <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
+        <button onclick="searchPeak()" id="search-button">Szukaj</button>
+    </div>
     <div id="map"></div>
     <script>
-        // Inicjalizacja mapy
         var map = L.map('map').setView([49.231556, 19.981972], 13); // Kasprowy Wierch, zoom: 13
-
-        // Dodanie warstwy mapy OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+        // OpenStreetMap API
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // Dodanie markera na Kasprowym Wierchu
-        var marker = L.marker([49.231556, 19.981972]).addTo(map);
-        marker.bindPopup('<b>Kasprowy Wierch</b><br>Jedno z najpopularniejszych miejsc w Tatrach.').openPopup();
+        // deafultowy maker- Kasprowy
+        var defaultMarker = L.marker([49.231556, 19.981972]).addTo(map);
+        defaultMarker.bindPopup(`<b>Kasprowy Wierch</b><br>Jedno z najpopularniejszych miejsc w Tatrach.<br><button onclick="removeMarker(0)">Usuń</button>`).openPopup();
 
+        var markers = [defaultMarker];
 
         function searchPeak() {
             var peakName = document.getElementById('search-box').value;
@@ -41,7 +51,7 @@
                 return;
             }
 
-            // Wysłanie zapytania do backendu
+            // Wysłanie zapytania do pythonowego backendu
             fetch(`/search_peak?q=${encodeURIComponent(peakName)}`)
                 .then(response => response.json())
                 .then(data => {
@@ -50,17 +60,24 @@
                         return;
                     }
 
-                    // Przesunięcie mapy na znaleziony szczyt
                     map.setView([data.lat, data.lon], 13);
-
-                    // Dodanie markera
                     var marker = L.marker([data.lat, data.lon]).addTo(map);
-                    marker.bindPopup(`<b>${data.name}</b>`).openPopup();
+                    marker.bindPopup(`<b>${data.name}</b><br><button onclick="removeMarker(${markers.length})">Usuń</button>`).openPopup();
+
+                    markers.push(marker);
                 })
                 .catch(error => {
                     console.error('Błąd:', error);
                     alert("Wystąpił błąd podczas wyszukiwania.");
                 });
+        }
+
+        // Funkcja do usuwania pojedynczego markera
+        function removeMarker(index) {
+            if (markers[index]) {
+                map.removeLayer(markers[index]);
+                markers.splice(index, 1);
+            }
         }
     </script>
 </body>
