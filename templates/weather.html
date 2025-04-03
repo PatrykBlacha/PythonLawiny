@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pogoda - {{ location }}</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Prognoza pogody - {{ location }}</h1>
+    </header>
+    <nav>
+        <a href="/">Strona główna</a>
+        <a href="/mapa">Mapa</a>
+        <div class="dropdown">
+            <a href="#" id="weather-toggle">Pogoda </a>
+            <div class="dropdown-content" id="weather-menu">
+                {% for name, coords in locations.items() %}
+                    <a href="/pogoda/{{ name|replace(' ', '_') }}">{{ name }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <a href="/o-nas">O nas</a>
+        <a href="/kontakt">Kontakt</a>
+    </nav>
+
+
+
+    <main>
+        <section id="weather">
+                <h2>Aktualna Pogoda - {{location}}</h2>
+                <div class="weather">
+                    <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                    <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}</p>
+                    <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                    <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+                </div>
+        </section>
+        <h2>Prognoza na 3 dni</h2>
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{{ temperature_ }}" alt="Wykres temperatury">
+        </div>
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{{ wind_ }}" alt="Wiatr">
+        </div >
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Temperatura (°C)</th>
+                    <th>Opady (mm)</th>
+                    <th>Prędkość wiatru (m/s)</th>
+                    <th>Zachmurzenie (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for index, row in forecast.iterrows() %}
+                    <tr>
+                        <td>{{ row['date'].strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ row['temperature_2m'] }}</td>
+                        <td>{{ row['precipitation_probability'] }}</td>
+                        <td>{{ row['wind_speed_10m'] }}</td>
+                        <td>{{ row['cloud_cover'] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    </main>
+
+</body>
+</html>
