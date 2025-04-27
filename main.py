@@ -10,6 +10,7 @@ from weather_locations import locations
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SECRET_KEY']='tajny klucz'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager()
@@ -30,7 +31,7 @@ def load_user(user_id):
 @app.route("/")
 def home():
     t, cc, w,sd = current_weather(49.2319,19.9817)
-    return render_template("index.html",temperature=round(t,2),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
+    return render_template("index.html",temperature=round(t),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
 
 @app.route("/map")
 def mapa():
@@ -69,14 +70,77 @@ def search_peak():
 def weather(location):
     location = location.replace("_", " ")
     latitude,longitude=locations.get(location)
-    forecast=forecast_3days(latitude,longitude)
-    temperature=get_forecast_plots(latitude,longitude)
-    wind=wind_plot(latitude,longitude)
+    forecast=forecast_5days(latitude,longitude)
     t, cc, w, sd = current_weather(latitude,longitude)
 
-    return render_template("weather.html",temperature=round(t, 2), cloud_cover=round(cc, 2), wind=round(w, 2),
-                           snow_depth=round(sd*100, 2),temperature_=temperature,wind_=wind,location=location,locations=locations,forecast=forecast,latitude=latitude,longitude=longitude)
+    return render_template("weather.html",temperature=round(t), cloud_cover=round(cc, 2), wind=round(w, 2), forecast=forecast,
+                           snow_depth=round(sd*100, 2),location=location,locations=locations,latitude=latitude,longitude=longitude)
 
+@app.route("/api/temperature_plot/<location>")
+def generate_temperature_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=forecast_5days(latitude,longitude)
+    plot= get_forecast_plots(forecast,latitude,longitude, False)
+    return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
+@app.route("/api/visibility_plot/<location>")
+def generate_visibility_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=forecast_5days(latitude,longitude)
+    plot= visibility_plot(forecast,latitude,longitude)
+    return f'<img src="/{plot}" alt="Wykres widoczności" style="max-width: 100%;">'
+@app.route("/api/historical_temperature_plot/<location>")
+def generate_historical_temperature_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=get_historical_weather(latitude,longitude)
+    plot= get_forecast_plots(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
+@app.route("/api/historical_wind_plot/<location>")
+def generate_historical_wind_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = get_historical_weather(latitude, longitude)
+    plot= get_wind_plot(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
+
+@app.route("/api/wind_plot/<location>")
+def generate_wind_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = forecast_5days(latitude, longitude)
+    plot= get_wind_plot(forecast,latitude,longitude,False)
+    return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
+
+@app.route("/api/historical_snow_plot/<location>")
+def generate_historical_snow_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = get_historical_weather(latitude, longitude)
+    plot= snow_depth_plot(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+
+@app.route("/api/snow_plot/<location>")
+def generate_snow_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = forecast_5days(latitude, longitude)
+    plot= snow_depth_plot(forecast,latitude,longitude,False)
+    return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+@app.route("/api/forecast/<location>")
+def generate_forecast(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    return weather_table(latitude,longitude)
+
+@app.route("/api/danger/<location>")
+def generate_danger(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    return danger_table(latitude,longitude)
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -129,4 +193,5 @@ def logout():
 
 
 if __name__ == "__main__":
+    print(weather_icon(1))
     app.run(debug=True)

@@ -1,17 +1,22 @@
+import datetime
 import numpy as np
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
 import pandas as pd
-import base64
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.dates as mdates
-import io
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from scipy.ndimage import rotate
 from PIL import Image
+import os
+import time
+import threading
+import locale
+locale.setlocale(locale.LC_TIME, "polish")
+lock = threading.Lock()
 
 # Setup the Open-Meteo API client with cache and retry on error
 cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
@@ -37,13 +42,13 @@ def current_weather(latitude,longitude):
     snow_depth=current.Variables(3).Value()
     return current_temperature_2m, current_cloud_cover, current_wind_speed_10m, snow_depth
 
-def forecast_3days(latitude,longitude):
+def forecast_5days(latitude,longitude):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": latitude,
         "longitude": longitude,
         "hourly": ["temperature_2m", "snowfall", "snow_depth", "precipitation_probability", "rain", "cloud_cover", "visibility", "wind_speed_10m", "wind_direction_10m"],
-        "forecast_days": 3
+        "forecast_days": 5
     }
     responses = openmeteo.weather_api(url, params=params)
 
@@ -77,83 +82,389 @@ def forecast_3days(latitude,longitude):
     hourly_dataframe = pd.DataFrame(data = hourly_data)
     return hourly_dataframe
 
-def get_forecast_plots(latitude, longitude):
-    forecast = forecast_3days(latitude, longitude)
+def snow_depth_plot(forecast, latitude, longitude,historical):
+    with lock:
+        if not historical:
+            snow_plot_filename = f"static/plots/snow_plot_{latitude}_{longitude}.png"
+        else:
+            snow_plot_filename= f"static/plots/historical_snow_plot_{latitude}_{longitude}.png"
 
-    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 6), sharex=True)
+        if os.path.exists(snow_plot_filename):
+            last_modified_time = os.path.getmtime(snow_plot_filename)
+            last_modified_hour = time.localtime(last_modified_time).tm_hour
+            current_time = time.time()
+            current_hour=time.localtime(current_time).tm_hour
 
-    # Wykres temperatury
-    ax1.plot(forecast['date'], forecast['temperature_2m'], label='Temperatura (°C)', color='tab:red')
-    ax1.set_ylabel('Temperatura (°C)')
-    ax1.set_title('Temperatura')
-    ax1.legend()
-    ax1.grid(True)
+            if current_hour == last_modified_hour:
+                return snow_plot_filename
 
-    # Wykres opadów
-    ax2.plot(forecast['date'], forecast['rain'], label='Opady deszczu (mm)', color='mediumblue')
-    ax2.plot(forecast['date'], forecast['snowfall'], label='Opady śniegu (mm)', color='lightskyblue')
+        fig, ax = plt.subplots(figsize=(16, 4))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
+        if historical:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+            ax.xaxis.set_major_locator(mdates.DayLocator())
+        fig.autofmt_xdate()
 
-    ax2.set_ylabel('Opady (mm)')
-    ax2.set_title('Opady')
-    ax2.legend(loc='upper left')
-    ax2.grid(True)
-    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
-    ax2.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        snow_depth = forecast['snow_depth'].apply(lambda x: 100*x)
 
-    ax3 = ax2.twinx()  #osobna skala dla prawdopodobienstwa opadów
-    ax3.fill_between(forecast['date'], 0, forecast['precipitation_probability'], color='lightslategray', alpha=0.2,
-                     label='Prawd. opadów')
-    ax3.set_ylabel('Prawd. opadów (%)')
-    ax3.set_ylim(0, 100)
-    ax3.legend(loc='upper right')
+        ax.fill_between(forecast["date"],0, snow_depth, color='lightskyblue',alpha=0.5)
+        ax.set_ylabel('Pokrywa śnieżna (cm)')
+        ax.set_title('Pokrywa śnieżna')
+        ax.legend()
+        ax.grid(True)
 
-    fig.autofmt_xdate() # automatyczne obracanie etykiet
+        plt.savefig(snow_plot_filename, format='png')
+        plt.close()
 
-    plt.tight_layout()
-
-    img = io.BytesIO()
-    plt.savefig(img, format='png')
-    img.seek(0)
-
-    # Konwersja wykresu do formatu base64, aby można go było wyświetlić w HTML
-    img_b64 = base64.b64encode(img.getvalue()).decode('utf-8')
-    return img_b64
+        return snow_plot_filename
 
 
-def wind_plot(latitude, longitude):
-    forecast=forecast_3days(latitude, longitude)
+def get_forecast_plots(forecast, latitude, longitude,historical):
+    with lock:
+        if not historical:
+            plot_filename = f"static/plots/forecast_temperature_plot_{latitude}_{longitude}.png"
+        else:
+            plot_filename = f"static/plots/historical_temperature_plot_{latitude}_{longitude}.png"
 
-    img = Image.open("static/pngegg.png")
-    img = img.convert("RGBA")
-    arrow_img = np.array(img)
+        if os.path.exists(plot_filename):
+            last_modified_time = os.path.getmtime(plot_filename)
+            last_modified_hour = time.localtime(last_modified_time).tm_hour
+            current_time = time.time()
+            current_hour=time.localtime(current_time).tm_hour
 
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
-    fig.autofmt_xdate()
+            if current_hour == last_modified_hour:
+                return plot_filename
 
-    dates = forecast['date']
-    wind_speed = forecast['wind_speed_10m']
-    wind_direction = forecast['wind_direction_10m']
+        fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(16, 6), sharex=True)
+        ax1.set_title('Temperatura i opady')
+        ax1.plot(forecast['date'], forecast['temperature_2m'], label='Temperatura (°C)', color='tab:red')
+        ax1.set_ylabel('Temperatura (°C)')
+        ax1.legend()
+        ax1.grid(True)
 
-    ax.plot(forecast["date"], forecast["wind_speed_10m"], color="green")
-    ax.set_ylabel('Prędkość wiatru (km/h)')
-    ax.set_title('Prędkość i kierunek wiatru')
-    ax.legend()
-    ax.grid(True)
 
-    # Dodanie strzałek
-    for i in range(0, len(dates),len(dates)//24):
-        img_rotated = rotate(arrow_img, angle=-wind_direction[i], reshape=True)
+        ax2.plot(forecast['date'], forecast['rain'], label='Opady deszczu (mm)', color='mediumblue')
+        ax2.plot(forecast['date'], forecast['snowfall'], label='Opady śniegu (mm)', color='lightskyblue')
+        ax2.set_ylabel('Opady (mm)')
+        ax2.legend(loc='upper left')
+        ax2.grid(True)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
+        ax2.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        if historical:
+            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+            ax2.xaxis.set_major_locator(mdates.DayLocator())
 
-        imagebox = OffsetImage(img_rotated, zoom=0.025)
-        ab = AnnotationBbox(imagebox, (dates[i], wind_speed[i]), frameon=False)
-        ax.add_artist(ab)
+        if not historical:
 
-    img = io.BytesIO()
-    plt.savefig(img, format='png')
-    img.seek(0)
+            ax3 = ax2.twinx()  # osobna skala dla prawdopodobieństwa opadów
+            ax3.fill_between(forecast['date'], 0, forecast['precipitation_probability'], color='lightslategray', alpha=0.2,
+                             label='Prawdopodobieństwo opadów')
+            ax3.set_ylabel('Prawd. opadów (%)')
+            ax3.set_ylim(0, 100)
+            ax3.legend(loc='upper right')
 
-    img_b64 = base64.b64encode(img.getvalue()).decode('utf-8')
-    return img_b64
+        fig.autofmt_xdate()
+
+        fig.subplots_adjust(hspace=0)
+
+        plt.savefig(plot_filename, format='png')
+        plt.close()
+
+        return plot_filename
+
+
+def get_wind_plot(forecast, latitude, longitude,historical):
+    with lock:
+        if not historical:
+            wind_plot_filename = f"static/plots/wind_plot_{latitude}_{longitude}.png"
+        else:
+            wind_plot_filename= f"static/plots/historical_wind_plot_{latitude}_{longitude}.png"
+        img = Image.open("static/pngegg.png")
+        img = img.convert("RGBA")
+        arrow_img = np.array(img)
+
+        if os.path.exists(wind_plot_filename):
+            last_modified_time = os.path.getmtime(wind_plot_filename)
+            last_modified_hour = time.localtime(last_modified_time).tm_hour
+            current_time = time.time()
+            current_hour=time.localtime(current_time).tm_hour
+
+            if current_hour == last_modified_hour:
+                return wind_plot_filename
+
+        fig, ax = plt.subplots(figsize=(16, 4))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
+        if historical:
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+            ax.xaxis.set_major_locator(mdates.DayLocator())
+        fig.autofmt_xdate()
+
+        dates = forecast['date']
+        wind_speed = forecast['wind_speed_10m']
+        wind_direction = forecast['wind_direction_10m']
+
+
+        ax.plot(forecast["date"], forecast["wind_speed_10m"], color="green")
+        ax.set_ylabel('Prędkość wiatru (km/h)')
+        ax.set_title('Prędkość i kierunek wiatru')
+        ax.legend()
+        ax.grid(True)
+
+        for i in range(0, len(dates),len(dates)//24):
+            if not np.isfinite(wind_direction[i]):
+                continue
+            img_rotated = rotate(arrow_img, angle=-wind_direction[i], reshape=True)
+            imagebox = OffsetImage(img_rotated, zoom=0.025)
+            ab = AnnotationBbox(imagebox, (dates[i], wind_speed[i]), frameon=False)
+            ax.add_artist(ab)
+
+        plt.savefig(wind_plot_filename, format='png')
+        plt.close()
+
+        return wind_plot_filename
+
+def visibility_plot(forecast,latitude, longitude):
+    with lock:
+        visibility_plot_filename = f"static/plots/visibility_plot_{latitude}_{longitude}.png"
+
+
+        if os.path.exists(visibility_plot_filename):
+            last_modified_time = os.path.getmtime(visibility_plot_filename)
+            last_modified_hour = time.localtime(last_modified_time).tm_hour
+            current_time = time.time()
+            current_hour=time.localtime(current_time).tm_hour
+
+            if current_hour == last_modified_hour:
+                return visibility_plot_filename
+
+        fig, ax = plt.subplots(figsize=(16, 4))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m %H:%M'))
+        fig.autofmt_xdate()
+
+        dates = forecast['date']
+        visibility = forecast['visibility']
+
+
+        ax.plot(dates, visibility, color="pink")
+        ax.set_ylabel('Widoczność (m)')
+        ax.set_title('Widoczność')
+        ax.legend()
+        ax.grid(True)
+
+        plt.savefig(visibility_plot_filename, format='png')
+        plt.close()
+
+        return visibility_plot_filename
+
+def weather_icon(weather_code):
+    if weather_code==0 or weather_code==1:
+        return "/static/weather_icons/sunny.png"
+    elif weather_code==2:
+        return "/static/weather_icons/partly_cloudy.png"
+    elif weather_code in (3,45,48):
+        return "/static/weather_icons/cloudy.png"
+    elif 51<=weather_code<=67 or 80<=weather_code<=82:
+        return "/static/weather_icons/rainy.png"
+    elif 71<=weather_code<=77 or weather_code==85 or weather_code==86:
+        return "/static/weather_icons/snowy.png"
+    elif 95<=weather_code<=99:
+        return "/static/weather_icons/stormy.png"
+
+
+def weather_table(latitude,longitude):
+    def link_to_img(link):
+        return f'<img src={link}>'
+
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "hourly": ["weather_code", "temperature_2m"],
+        "temporal_resolution": "hourly_3",
+        "forecast_days": 5
+    }
+    responses = openmeteo.weather_api(url, params=params)
+
+    # Process first location. Add a for-loop for multiple locations or weather models
+    response = responses[0]
+
+    # Process hourly data. The order of variables needs to be the same as requested.
+    hourly = response.Hourly()
+    hourly_weather_code = hourly.Variables(0).ValuesAsNumpy()
+    hourly_temperature_2m = hourly.Variables(1).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    ), "weather_code": hourly_weather_code, "temperature_2m": hourly_temperature_2m}
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data )
+
+    hourly_dataframe['weather_code'] = hourly_dataframe['weather_code'].apply(weather_icon).apply(link_to_img)
+    hourly_dataframe['date']= hourly_dataframe['date'].apply(lambda x: x.strftime("%A %H:%M"))
+    hourly_dataframe['temperature_2m'] = hourly_dataframe['temperature_2m'].apply(lambda x: str(round(x)) + "°C")
+    hourly_dataframe=hourly_dataframe.transpose()
+    html_table = hourly_dataframe.to_html(classes='table table-striped', index=False, escape=False,header=False)
+    return html_table
+
+def get_historical_weather(latitude,longitude):
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    end_date = datetime.date.today()- datetime.timedelta(days=1)
+    start_date = end_date - datetime.timedelta(days=14)
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": start_date_str,
+        "end_date": end_date_str,
+        "hourly": ["temperature_2m", "rain", "snowfall", "snow_depth", "wind_speed_10m", "wind_direction_10m",
+                   "direct_normal_irradiance", "shortwave_radiation"],
+        "temporal_resolution": "hourly_6"
+    }
+    responses = openmeteo.weather_api(url, params=params)
+
+    response = responses[0]
+
+    hourly = response.Hourly()
+    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+    hourly_rain = hourly.Variables(1).ValuesAsNumpy()
+    hourly_snowfall = hourly.Variables(2).ValuesAsNumpy()
+    hourly_snow_depth = hourly.Variables(3).ValuesAsNumpy()
+    hourly_wind_speed_10m = hourly.Variables(4).ValuesAsNumpy()
+    hourly_wind_direction_10m = hourly.Variables(5).ValuesAsNumpy()
+    hourly_direct_normal_irradiance = hourly.Variables(6).ValuesAsNumpy()
+    hourly_shortwave_radiation = hourly.Variables(7).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    ), "temperature_2m": hourly_temperature_2m, "rain": hourly_rain, "snowfall": hourly_snowfall,
+        "snow_depth": hourly_snow_depth, "wind_speed_10m": hourly_wind_speed_10m,
+        "wind_direction_10m": hourly_wind_direction_10m, "direct_normal_irradiance": hourly_direct_normal_irradiance,
+        "shortwave_radiation": hourly_shortwave_radiation}
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+    return hourly_dataframe
+
+def danger_table(latitude,longitude):
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "daily": ["temperature_2m_max", "rain_sum", "snowfall_sum", "wind_gusts_10m_max", "temperature_2m_min"],
+        "hourly": "snow_depth",
+        "timezone": "auto",
+        "past_days": 5,
+        "forecast_days": 6
+    }
+    responses = openmeteo.weather_api(url, params=params)
+
+    # Process first location. Add a for-loop for multiple locations or weather models
+    response = responses[0]
+
+    hourly = response.Hourly()
+    hourly_snow_depth = hourly.Variables(0).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    ), "snow_depth": hourly_snow_depth}
+
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+    hourly_dataframe['day'] = hourly_dataframe['date'].dt.date
+    daily_max_snow = hourly_dataframe.groupby('day')['snow_depth'].max().reset_index()
+
+    # Process daily data. The order of variables needs to be the same as requested.
+    daily = response.Daily()
+    daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
+    daily_rain_sum = daily.Variables(1).ValuesAsNumpy()
+    daily_snowfall_sum = daily.Variables(2).ValuesAsNumpy()
+    daily_wind_gusts_10m_max = daily.Variables(3).ValuesAsNumpy()
+    daily_temperature_2m_min = daily.Variables(4).ValuesAsNumpy()
+
+    daily_data = {"date": pd.date_range(
+        start=pd.to_datetime(daily.Time(), unit="s", utc=True),
+        end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=daily.Interval()),
+        inclusive="left"
+    ), "temperature_2m_max": daily_temperature_2m_max, "rain_sum": daily_rain_sum, "snowfall_sum": daily_snowfall_sum,
+        "wind_gusts_10m_max": daily_wind_gusts_10m_max, "temperature_2m_min": daily_temperature_2m_min}
+
+
+    daily_dataframe = pd.DataFrame(data=daily_data)
+
+    icons=['<img src="/static/szare_kolko.png">' for _ in range(len(daily_dataframe))]
+    for idx in range(len(daily_dataframe)):
+        text = ''
+        snow_today = daily_max_snow[daily_max_snow['day'] == daily_dataframe['date'][idx].date()]
+        if not snow_today.empty:
+            snow_depth_today = snow_today['snow_depth'].values[0]
+            if snow_depth_today==0:
+                continue
+        else:
+            continue
+
+        days_min=0
+        days_max=0
+        if daily_wind_gusts_10m_max[idx]>40:
+            conditions=2
+            text = 'silny wiatr'
+            days_min=2
+            days_max=4
+        if daily_temperature_2m_max[idx] < -8:
+            conditions=2
+            if text:
+                text+=', niska temperatura'
+            else:
+                text='niska temperatura'
+        if daily_wind_gusts_10m_max[idx]<25 and daily_temperature_2m_max[idx]<0 and daily_temperature_2m_min[idx]>-10:
+            conditions=0
+        else:
+            conditions=1
+        if conditions==2 and daily_snowfall_sum[idx]>=15 or conditions==1 and daily_snowfall_sum[idx]>=25 or conditions==0 and daily_snowfall_sum[idx]>=40:
+            if text:
+                text+=', duże opady śniegu'
+            else:
+                text='duże opady śniegu'
+            if not days_min:
+                days_min, days_max=1,3
+        if daily_temperature_2m_max[idx]-daily_temperature_2m_min[idx]>10:
+            if not days_min:
+                days_min, days_max = 1, 3
+            if not text:
+                text='duży wzrost temperatury'
+            else: text+=', duży wzrost temperatury'
+
+        if daily_rain_sum[idx]>10 and snow_depth_today>0:
+            if not days_min:
+                days_min, days_max = 1, 2
+            if not text:
+                text='deszcz na śnieg'
+            else: text+=', deszcz na śnieg'
+        if text:
+            icons[idx]=f'<img src="/static/achtung.png" title="{text}">'
+            for i in range(idx+1,min(idx+days_min+1,len(daily_dataframe))):
+                icons[i] = f'<img src="/static/pomaranczowe_kolko.png" title="{text}">'
+            for i in range(idx+days_min+1,min(idx+days_max+1,len(daily_dataframe))):
+                icons[i] = f'<img src="/static/zolte_kolko.png" title="{text}">'
+
+
+    daily_dataframe['icon'] = icons
+    table_data = daily_dataframe[['date', 'icon']][daily_dataframe['date'].dt.date>=datetime.date.today()]
+    table_data['date'] = table_data['date'].apply(lambda x: x.strftime("%d-%m"))
+    table_data=table_data.transpose()
+    html_table = table_data.to_html(classes='table table-striped',index=False, escape=False, header=False)
+
+    return html_table
 
