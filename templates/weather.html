@@ -3,53 +3,172 @@
 {% block title %}Pogoda - {{ location }}{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row">
-        <div class="col-md-12">
-            <h1 class="text-center mb-4">Prognoza pogody - {{ location }}</h1>
-            <section id="weather">
-                <h2>Aktualna Pogoda - {{ location }}</h2>
-                <div class="row text-center mb-4">
-                    <div class="col"><strong>Temperatura:</strong> {{ temperature }}°C</div>
-                    <div class="col"><strong>Zachmurzenie:</strong> {{ cloud_cover }}</div>
-                    <div class="col"><strong>Wiatr:</strong> {{ wind }} km/h</div>
-                    <div class="col"><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</div>
-                </div>
-            </section>
-            <section id="forecast">
-                <h2>Prognoza na 3 dni</h2>
-                <div class="text-center mb-4">
-                    <img src="data:image/png;base64,{{ temperature_ }}" alt="Wykres temperatury" class="img-fluid">
-                </div>
-                <div class="text-center mb-4">
-                    <img src="data:image/png;base64,{{ wind_ }}" alt="Wykres wiatru" class="img-fluid">
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Data</th>
-                                <th>Temperatura (°C)</th>
-                                <th>Opady (mm)</th>
-                                <th>Prędkość wiatru (m/s)</th>
-                                <th>Zachmurzenie (%)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for index, row in forecast.iterrows() %}
-                                <tr>
-                                    <td>{{ row['date'].strftime('%Y-%m-%d %H:%M') }}</td>
-                                    <td>{{ row['temperature_2m'] }}</td>
-                                    <td>{{ row['precipitation_probability'] }}</td>
-                                    <td>{{ row['wind_speed_10m'] }}</td>
-                                    <td>{{ row['cloud_cover'] }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+    <section id="weather">
+            <h2>Aktualna Pogoda - {{location}}</h2>
+            <div class="weather">
+                <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}%</p>
+                <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+            </div>
+    </section>
+        <div class="d-flex justify-content-center my-3">
+            <button id="forecast-btn" class="btn btn-primary me-2 active">Prognoza 5 dni</button>
+            <button id="history-btn" class="btn btn-outline-secondary">Pogoda historyczna</button>
         </div>
-    </div>
-</div>
+
+        <div id="forecast-content">
+            <div id="forecast-table" class="table-container" style="text-align: center;">
+                <div class="loader">Ładowanie tabeli prognozy...</div>
+            </div>
+            <div style="height: 30px;"></div>
+            <h3>Czynniki zwiększające zagrożenie lawinowe</h3>
+            <div class="legend" style="margin-top: 20px; text-align: center;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div><img src="/static/achtung.png" style="height: 20px;"> - nowe zagrożenie</div>
+                <div><img src="/static/pomaranczowe_kolko.png" style="height: 20px;"> - utrzymujące się zagrożenie</div>
+                <div><img src="/static/zolte_kolko.png" style="height: 20px;"> - zagrożenie zanikające</div>
+                <div><img src="/static/szare_kolko.png" style="height: 20px;"> - brak czynników</div>
+            </div>
+        </div>
+            <div id="danger-table" class="table-container" style="text-align: center;">
+                <div class="loader">Ładowanie tabeli zagrożeń...</div>
+            </div>
+            <div id="temperature-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu temperatury...</div>
+            </div>
+            <div id="wind-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu wiatru...</div>
+            </div>
+            <div id="visibility-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu widoczności...</div>
+            </div>
+            <div id="snow-depth-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
+            </div>
+        </div>
+
+        <div id="history-content" style="display: none; text-align: center;">
+            <p>Tu będzie pogoda historyczna</p>
+            <div id="historical_temperature-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu temperatury...</div>
+            </div>
+            <div id="hist-wind-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu wiatru...</div>
+            </div>
+            <div id="hist-snow-depth-plot" style="text-align: center;">
+                <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
+            </div>
+
+        </div>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+    const location = "{{ location }}";
+
+    // Przycisk przełączania
+    const forecastBtn = document.getElementById("forecast-btn");
+    const historyBtn = document.getElementById("history-btn");
+    const forecastContent = document.getElementById("forecast-content");
+    const historyContent = document.getElementById("history-content");
+
+    forecastBtn.addEventListener("click", () => {
+        forecastContent.style.display = "block";
+        historyContent.style.display = "none";
+        forecastBtn.classList.add("btn-primary", "active");
+        forecastBtn.classList.remove("btn-outline-secondary");
+        historyBtn.classList.remove("btn-primary", "active");
+        historyBtn.classList.add("btn-outline-secondary");
+    });
+
+    historyBtn.addEventListener("click", () => {
+        forecastContent.style.display = "none";
+        historyContent.style.display = "block";
+        historyBtn.classList.add("btn-primary", "active");
+        historyBtn.classList.remove("btn-outline-secondary");
+        forecastBtn.classList.remove("btn-primary", "active");
+        forecastBtn.classList.add("btn-outline-secondary");
+    });
+
+    // Ładowanie danych prognozy
+    fetch(`/api/forecast/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("forecast-table").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("forecast-table").innerHTML = "Błąd ładowania tabeli prognozy.";
+        });
+
+    fetch(`/api/danger/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("danger-table").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("danger-table").innerHTML = "Błąd ładowania tabeli prognozy.";
+        });
+
+    fetch(`/api/temperature_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("temperature-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("temperature-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+
+    fetch(`/api/wind_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("wind-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("wind-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+    fetch(`/api/snow_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("snow-depth-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("snow-depth-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+
+    fetch(`/api/visibility_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("visibility-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("visibility-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+
+    fetch(`/api/historical_temperature_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("historical_temperature-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("historical_temperature-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+
+    fetch(`/api/historical_wind_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("hist-wind-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("hist-wind-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+    fetch(`/api/historical_snow_plot/${location}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("hist-snow-depth-plot").innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById("hist-snow-depth-plot").innerHTML = "Błąd ładowania wykresu.";
+        });
+});
+
+</script>
 {% endblock %}

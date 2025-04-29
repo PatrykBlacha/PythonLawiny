@@ -1,24 +1,23 @@
 {% extends "base.html" %}
 
 {% block title %}Mapa Turystyczna - Strona Główna{% endblock %}
-
 {% block content %}
-<section id="home" class="intro">
-    <h2>Witamy na stronie Mapa Turystyczna!</h2>
-    <p>
-        Nasz projekt ma na celu ułatwienie planowania wycieczek w góry i na szlaki turystyczne.
-        Znajdziesz tutaj interaktywną mapę, aktualne informacje o pogodzie oraz przewodnik
-        po najlepszych trasach i atrakcjach. Skorzystaj z naszych zasobów, aby lepiej zaplanować
-        swoje przygody!
-    </p>
-</section>
-<section id="weather">
-    <h2>Aktualna Pogoda - Kasprowy Wierch</h2>
-    <div class="weather">
-        <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
-        <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}</p>
-        <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
-        <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
-    </div>
-</section>
+    <section id="home" class="intro">
+        <h2>Witamy na stronie Mapa Turystyczna!</h2>
+        <p>
+            Nasz projekt ma na celu ułatwienie planowania wycieczek w góry i na szlaki turystyczne.
+            Znajdziesz tutaj interaktywną mapę, aktualne informacje o pogodzie oraz przewodnik
+            po najlepszych trasach i atrakcjach. Skorzystaj z naszych zasobów, aby lepiej zaplanować
+            swoje przygody!
+        </p>
+    </section>
+        <section id="weather">
+            <h2>Aktualna Pogoda - Kasprowy Wierch</h2>
+            <div class="weather">
+                <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}%</p>
+                <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+            </div>
+        </section>
 {% endblock %}

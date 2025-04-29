@@ -437,3 +437,18 @@ button{
 #search-button:hover {
     background: #45a049;
 }
+
+/* Kontener z tabelą, który ma pasek przewijania */
+.table-container {
+    overflow-x: auto;
+    width: 100%;  /* Możesz dostosować do szerokości, jaką chcesz */
+}
+
+/* Styl samej tabeli */
+.table img {
+    width: 40px;
+    height: 40px;
+    display: inline-block;
+    object-fit: contain;
+}
+

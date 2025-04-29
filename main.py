@@ -10,7 +10,7 @@ from weather_locations import locations
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SECRET_KEY'] = 'tajny_klucz'
+app.config['SECRET_KEY']='tajny klucz'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager()
@@ -31,7 +31,7 @@ def load_user(user_id):
 @app.route("/")
 def home():
     t, cc, w,sd = current_weather(49.2319,19.9817)
-    return render_template("index.html",temperature=round(t,2),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
+    return render_template("index.html",temperature=round(t),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
 
 @app.context_processor
 def inject_locations():
@@ -40,7 +40,6 @@ def inject_locations():
 @app.route("/map")
 def mapa():
     return render_template("map.html")
-
 
 @app.route("/search_peak", methods=["GET"])
 def search_peak():
@@ -75,13 +74,50 @@ def search_peak():
 def weather(location):
     location = location.replace("_", " ")
     latitude,longitude=locations.get(location)
-    forecast=forecast_3days(latitude,longitude)
-    temperature=get_forecast_plots(latitude,longitude)
-    wind=wind_plot(latitude,longitude)
+    forecast=forecast_5days(latitude,longitude)
     t, cc, w, sd = current_weather(latitude,longitude)
 
-    return render_template("weather.html",temperature=round(t, 2), cloud_cover=round(cc, 2), wind=round(w, 2),
-                           snow_depth=round(sd*100, 2),temperature_=temperature,wind_=wind,location=location,locations=locations,forecast=forecast,latitude=latitude,longitude=longitude)
+    return render_template("weather.html",temperature=round(t), cloud_cover=round(cc, 2), wind=round(w, 2), forecast=forecast,
+                           snow_depth=round(sd*100, 2),location=location,locations=locations,latitude=latitude,longitude=longitude)
+
+@app.route("/api/temperature_plot/<location>")
+def generate_temperature_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=forecast_5days(latitude,longitude)
+    plot= get_forecast_plots(forecast,latitude,longitude, False)
+    return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
+@app.route("/api/visibility_plot/<location>")
+def generate_visibility_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=forecast_5days(latitude,longitude)
+    plot= visibility_plot(forecast,latitude,longitude)
+    return f'<img src="/{plot}" alt="Wykres widoczności" style="max-width: 100%;">'
+@app.route("/api/historical_temperature_plot/<location>")
+def generate_historical_temperature_plot(location):
+    location = location.replace("_", " ")
+    latitude, longitude = locations.get(location)
+    forecast=get_historical_weather(latitude,longitude)
+    plot= get_forecast_plots(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
+@app.route("/api/historical_wind_plot/<location>")
+def generate_historical_wind_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = get_historical_weather(latitude, longitude)
+    plot= get_wind_plot(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
+
+@app.route("/api/wind_plot/<location>")
+def generate_wind_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = forecast_5days(latitude, longitude)
+    plot= get_wind_plot(forecast,latitude,longitude,False)
+    return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -126,6 +162,7 @@ def profile():
     return render_template('profile.html', user=current_user)
 
 @app.route("/logout")
+@login_required
 def logout():
     logout_user()
     flash("Wylogowano!", "info")
@@ -134,4 +171,5 @@ def logout():
 
 
 if __name__ == "__main__":
+    print(weather_icon(1))
     app.run(debug=True)
