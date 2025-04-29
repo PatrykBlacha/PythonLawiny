@@ -1,73 +1,55 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pogoda - {{ location }}</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <header>
-        <h1>Prognoza pogody - {{ location }}</h1>
-    </header>
-    <nav>
-        <a href="/">Strona główna</a>
-        <a href="/map">Mapa</a>
-        <div class="dropdown">
-            <a href="#" id="weather-toggle">Pogoda </a>
-            <div class="dropdown-content" id="weather-menu">
-                {% for name, coords in locations.items() %}
-                    <a href="/pogoda/{{ name|replace(' ', '_') }}">{{ name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        <a href="/o-nas">O nas</a>
-        <a href="/kontakt">Kontakt</a>
-    </nav>
+{% extends "base.html" %}
 
+{% block title %}Pogoda - {{ location }}{% endblock %}
 
-
-    <main>
-        <section id="weather">
-                <h2>Aktualna Pogoda - {{location}}</h2>
-                <div class="weather">
-                    <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
-                    <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}</p>
-                    <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
-                    <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12">
+            <h1 class="text-center mb-4">Prognoza pogody - {{ location }}</h1>
+            <section id="weather">
+                <h2>Aktualna Pogoda - {{ location }}</h2>
+                <div class="row text-center mb-4">
+                    <div class="col"><strong>Temperatura:</strong> {{ temperature }}°C</div>
+                    <div class="col"><strong>Zachmurzenie:</strong> {{ cloud_cover }}</div>
+                    <div class="col"><strong>Wiatr:</strong> {{ wind }} km/h</div>
+                    <div class="col"><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</div>
                 </div>
-        </section>
-        <h2>Prognoza na 3 dni</h2>
-        <div style="text-align: center;">
-            <img src="data:image/png;base64,{{ temperature_ }}" alt="Wykres temperatury">
+            </section>
+            <section id="forecast">
+                <h2>Prognoza na 3 dni</h2>
+                <div class="text-center mb-4">
+                    <img src="data:image/png;base64,{{ temperature_ }}" alt="Wykres temperatury" class="img-fluid">
+                </div>
+                <div class="text-center mb-4">
+                    <img src="data:image/png;base64,{{ wind_ }}" alt="Wykres wiatru" class="img-fluid">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Data</th>
+                                <th>Temperatura (°C)</th>
+                                <th>Opady (mm)</th>
+                                <th>Prędkość wiatru (m/s)</th>
+                                <th>Zachmurzenie (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for index, row in forecast.iterrows() %}
+                                <tr>
+                                    <td>{{ row['date'].strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ row['temperature_2m'] }}</td>
+                                    <td>{{ row['precipitation_probability'] }}</td>
+                                    <td>{{ row['wind_speed_10m'] }}</td>
+                                    <td>{{ row['cloud_cover'] }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </div>
-        <div style="text-align: center;">
-            <img src="data:image/png;base64,{{ wind_ }}" alt="Wiatr">
-        </div >
-        <table border="1">
-            <thead>
-                <tr>
-                    <th>Data</th>
-                    <th>Temperatura (°C)</th>
-                    <th>Opady (mm)</th>
-                    <th>Prędkość wiatru (m/s)</th>
-                    <th>Zachmurzenie (%)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for index, row in forecast.iterrows() %}
-                    <tr>
-                        <td>{{ row['date'].strftime('%Y-%m-%d %H:%M') }}</td>
-                        <td>{{ row['temperature_2m'] }}</td>
-                        <td>{{ row['precipitation_probability'] }}</td>
-                        <td>{{ row['wind_speed_10m'] }}</td>
-                        <td>{{ row['cloud_cover'] }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-    </main>
-
-</body>
-</html>
+    </div>
+</div>
+{% endblock %}

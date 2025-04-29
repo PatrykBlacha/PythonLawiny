@@ -1,5 +1,5 @@
 from main import app, db
-from main import User  # Załóżmy, że masz model User w main.py
+from main import User
 
 def show_database_status():
     with app.app_context():
@@ -7,7 +7,7 @@ def show_database_status():
 
         if users:
             for user in users:
-                print(f"ID: {user.id}, Username: {user.username}")
+                print(f"ID: {user.id}, Username: {user.username}, Password: {user.password}")
         else:
             print("Brak użytkowników w bazie danych.")
 

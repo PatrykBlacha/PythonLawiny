@@ -10,6 +10,7 @@ from weather_locations import locations
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SECRET_KEY'] = 'tajny_klucz'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager()
@@ -32,9 +33,14 @@ def home():
     t, cc, w,sd = current_weather(49.2319,19.9817)
     return render_template("index.html",temperature=round(t,2),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
 
+@app.context_processor
+def inject_locations():
+    return {'locations': locations}
+
 @app.route("/map")
 def mapa():
     return render_template("map.html")
+
 
 @app.route("/search_peak", methods=["GET"])
 def search_peak():
@@ -45,7 +51,7 @@ def search_peak():
 
     # Nominatium  OpenStreetMap API
     url = f"https://nominatim.openstreetmap.org/search?format=json&q={peak_name}&featuretype=peak"
-    headers = {"User-Agent": "Tu mozna wpisac doslownie dowolna rzecz i bedzie dzialac"}  # Ustal własnego user-agenta
+    headers = {"User-Agent": "Tu mozna wpisac doslownie dowolna rzecz i bedzie dzialac"}
 
     response = requests.get(url, headers=headers)
 
@@ -120,7 +126,6 @@ def profile():
     return render_template('profile.html', user=current_user)
 
 @app.route("/logout")
-@login_required
 def logout():
     logout_user()
     flash("Wylogowano!", "info")

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>{% block title %}Mapa Turystyczna - Strona Główna{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Mapa Turystyczna</h1>
+        <div class="auth-buttons">
+            {% if current_user.is_authenticated %}
+                <a href="/profile" class="auth-btn">Profil</a>
+            {% else %}
+                <a href="/login" class="auth-btn">Zaloguj się</a>
+                <a href="/register" class="auth-btn">Zarejestruj się</a>
+            {% endif %}
+        </div>
+    </header>
+    <nav>
+        <a href="/">Strona główna</a>
+        <a href="/map">Mapa</a>
+        <div class="dropdown">
+            <a href="#" id="weather-toggle">Pogoda</a>
+            <div class="dropdown-content" id="weather-menu">
+                {% for name, coords in locations.items() %}
+                    <a href="/pogoda/{{ name|replace(' ', '_') }}">{{ name }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        <a href="/o-nas">O nas</a>
+        <a href="/kontakt">Kontakt</a>
+    </nav>
+
+    <main>
+        {% block content %}
+        <!-- Domyślna treść strony głównej -->
+        <section id="home" class="intro">
+            <h2>Witamy na stronie Mapa Turystyczna!</h2>
+            <p>
+                Nasz projekt ma na celu ułatwienie planowania wycieczek w góry i na szlaki turystyczne.
+                Znajdziesz tutaj interaktywną mapę, aktualne informacje o pogodzie oraz przewodnik
+                po najlepszych trasach i atrakcjach. Skorzystaj z naszych zasobów, aby lepiej zaplanować
+                swoje przygody!
+            </p>
+        </section>
+        <section id="weather">
+            <h2>Aktualna Pogoda - Kasprowy Wierch</h2>
+            <div class="weather">
+                <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}</p>
+                <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+            </div>
+        </section>
+        {% endblock %}
+    </main>
+    <footer>
+        <p>Tu coś pewnie trzeba napisać</p>
+    </footer>
+</body>
+</html>
