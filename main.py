@@ -119,6 +119,33 @@ def generate_wind_plot(location):
     plot= get_wind_plot(forecast,latitude,longitude,False)
     return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
 
+@app.route("/api/historical_snow_plot/<location>")
+def generate_historical_snow_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = get_historical_weather(latitude, longitude)
+    plot= snow_depth_plot(forecast,latitude,longitude,True)
+    return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+
+@app.route("/api/snow_plot/<location>")
+def generate_snow_plot(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    forecast = forecast_5days(latitude, longitude)
+    plot= snow_depth_plot(forecast,latitude,longitude,False)
+    return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+@app.route("/api/forecast/<location>")
+def generate_forecast(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    return weather_table(latitude,longitude)
+
+@app.route("/api/danger/<location>")
+def generate_danger(location):
+    location = location.replace("_"," ")
+    latitude, longitude = locations.get(location)
+    return danger_table(latitude,longitude)
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":

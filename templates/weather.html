@@ -1,66 +1,92 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pogoda - {{ location }}</title>
 
-{% block title %}Pogoda - {{ location }}{% endblock %}
-
-{% block content %}
-    <section id="weather">
-            <h2>Aktualna Pogoda - {{location}}</h2>
-            <div class="weather">
-                <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
-                <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}%</p>
-                <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
-                <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
-            </div>
-    </section>
-        <div class="d-flex justify-content-center my-3">
-            <button id="forecast-btn" class="btn btn-primary me-2 active">Prognoza 5 dni</button>
-            <button id="history-btn" class="btn btn-outline-secondary">Pogoda historyczna</button>
-        </div>
-
-        <div id="forecast-content">
-            <div id="forecast-table" class="table-container" style="text-align: center;">
-                <div class="loader">Ładowanie tabeli prognozy...</div>
-            </div>
-            <div style="height: 30px;"></div>
-            <h3>Czynniki zwiększające zagrożenie lawinowe</h3>
-            <div class="legend" style="margin-top: 20px; text-align: center;">
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                <div><img src="/static/achtung.png" style="height: 20px;"> - nowe zagrożenie</div>
-                <div><img src="/static/pomaranczowe_kolko.png" style="height: 20px;"> - utrzymujące się zagrożenie</div>
-                <div><img src="/static/zolte_kolko.png" style="height: 20px;"> - zagrożenie zanikające</div>
-                <div><img src="/static/szare_kolko.png" style="height: 20px;"> - brak czynników</div>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Prognoza pogody - {{ location }}</h1>
+    </header>
+    <nav>
+        <a href="/">Strona główna</a>
+        <a href="/map">Mapa</a>
+        <div class="dropdown">
+            <a href="#" id="weather-toggle">Pogoda </a>
+            <div class="dropdown-content" id="weather-menu">
+                {% for name, coords in locations.items() %}
+                    <a href="/pogoda/{{ name|replace(' ', '_') }}">{{ name }}</a>
+                {% endfor %}
             </div>
         </div>
-            <div id="danger-table" class="table-container" style="text-align: center;">
-                <div class="loader">Ładowanie tabeli zagrożeń...</div>
-            </div>
-            <div id="temperature-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu temperatury...</div>
-            </div>
-            <div id="wind-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu wiatru...</div>
-            </div>
-            <div id="visibility-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu widoczności...</div>
-            </div>
-            <div id="snow-depth-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
-            </div>
-        </div>
+    </nav>
 
-        <div id="history-content" style="display: none; text-align: center;">
-            <p>Tu będzie pogoda historyczna</p>
-            <div id="historical_temperature-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu temperatury...</div>
-            </div>
-            <div id="hist-wind-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu wiatru...</div>
-            </div>
-            <div id="hist-snow-depth-plot" style="text-align: center;">
-                <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
+
+
+    <main>
+        <section id="weather">
+                <h2>Aktualna Pogoda - {{location}}</h2>
+                <div class="weather">
+                    <p><strong>Temperatura:</strong> {{ temperature }}°C</p>
+                    <p><strong>Zachmurzenie:</strong> {{ cloud_cover }}%</p>
+                    <p><strong>Wiatr:</strong> {{ wind }} km/h</p>
+                    <p><strong>Pokrywa śnieżna:</strong> {{ snow_depth }} cm</p>
+                </div>
+        </section>
+            <div class="d-flex justify-content-center my-3">
+                <button id="forecast-btn" class="btn btn-primary me-2 active">Prognoza 5 dni</button>
+                <button id="history-btn" class="btn btn-outline-secondary">Pogoda historyczna</button>
             </div>
 
-        </div>
+            <div id="forecast-content">
+                <div id="forecast-table" class="table-container" style="text-align: center;">
+                    <div class="loader">Ładowanie tabeli prognozy...</div>
+                </div>
+                <div style="height: 30px;"></div>
+                <h3>Czynniki zwiększające zagrożenie lawinowe</h3>
+                <div class="legend" style="margin-top: 20px; text-align: center;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div><img src="/static/achtung.png" style="height: 20px;"> - nowe zagrożenie</div>
+                    <div><img src="/static/pomaranczowe_kolko.png" style="height: 20px;"> - utrzymujące się zagrożenie</div>
+                    <div><img src="/static/zolte_kolko.png" style="height: 20px;"> - zagrożenie zanikające</div>
+                    <div><img src="/static/szare_kolko.png" style="height: 20px;"> - brak czynników</div>
+                </div>
+            </div>
+                <div id="danger-table" class="table-container" style="text-align: center;">
+                    <div class="loader">Ładowanie tabeli zagrożeń...</div>
+                </div>
+                <div id="temperature-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu temperatury...</div>
+                </div>
+                <div id="wind-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu wiatru...</div>
+                </div>
+                <div id="visibility-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu widoczności...</div>
+                </div>
+                <div id="snow-depth-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
+                </div>
+            </div>
+
+            <div id="history-content" style="display: none; text-align: center;">
+                <p>Tu będzie pogoda historyczna</p>
+                <div id="historical_temperature-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu temperatury...</div>
+                </div>
+                <div id="hist-wind-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu wiatru...</div>
+                </div>
+                <div id="hist-snow-depth-plot" style="text-align: center;">
+                    <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
+                </div>
+
+            </div>
+    </main>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
     const location = "{{ location }}";
@@ -171,4 +197,5 @@
 });
 
 </script>
-{% endblock %}
+</body>
+</html>
