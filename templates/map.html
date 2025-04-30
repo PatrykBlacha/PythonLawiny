@@ -1,65 +1,380 @@
 {% extends "base.html" %}
 
-{% block title %}Mapa Turystyczna - Mapa{% endblock %}
+{% block title %}Mapa Turystyczna - Mapa z Trasami{% endblock %}
 
 {% block content %}
 <head>
-     <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css" integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14=" crossorigin="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css"
+          integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14="
+          crossorigin="">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js" integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg=" crossorigin=""></script>
 </head>
-<div class="search-container">
-    <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
-    <button onclick="searchPeak()" id="search-button">Szukaj</button>
-</div>
-<div id="map"></div>
-<script>
-    var map = L.map('map').setView([49.231556, 19.981972], 13); // Kasprowy Wierch, zoom: 13
-    // OpenStreetMap API
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
 
-    // deafultowy maker- Kasprowy
-    var defaultMarker = L.marker([49.231556, 19.981972]).addTo(map);
-    defaultMarker.bindPopup(`<b>Kasprowy Wierch</b><br>Jedno z najpopularniejszych miejsc w Tatrach.<br><button onclick="removeMarker(0)">Usuń</button>`).openPopup();
+<body>
+    <div class="search-container">
+        <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
+        <button onclick="searchPeak()" id="search-button">Szukaj</button>
+        <button onclick="toggleDrawMode()" class="mapButton">Przełącz tryb tworzenia trasy</button>
+        <button onclick="saveCurrentRoute()" class="mapButton">Zapisz trasę</button>
+    </div>
 
-    var markers = [defaultMarker];
+    <div class="route-controls" style="display: none;">
+        <button onclick="removeLastPoint()" class="mapButton">Usuń ostatni punkt</button>
+        <button onclick="closeRouteLoop()" class="mapButton">Zamknij trasę (pętla)</button>
+    </div>
 
-    function searchPeak() {
-        var peakName = document.getElementById('search-box').value;
-        if (!peakName) {
-            alert("Proszę wpisać nazwę szczytu.");
-            return;
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
+            integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
+            crossorigin=""></script>
+
+    <script>
+        // Inicjalizacja mapy
+        var map = L.map('map').setView([49.231556, 19.981972], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var markers = [];
+        var routePoints = [];
+        var currentPolyline = null;
+        var drawingRoute = false;
+
+        const routeControlsDiv = document.querySelector('.route-controls');
+
+        function searchPeak() {
+            var peakName = document.getElementById('search-box').value;
+
+            if (!peakName) {
+                alert("Proszę wpisać nazwę szczytu.");
+                return;
+            }
+
+            fetch(`/search_peak?q=${encodeURIComponent(peakName)}`)
+                .then(response => {
+                    if (!response.ok) throw new Error("Błąd API");
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+
+                    //Widok mapy
+                    map.setView([data.lat, data.lon], 13);
+
+                    //sprawdzam czy istnieje już taka pinezka
+                    const exists = markers.some(marker => {
+                        const pos = marker.getLatLng();
+                        return (
+                            Math.abs(pos.lat - parseFloat(data.lat)) < 0.0001 &&
+                            Math.abs(pos.lng - parseFloat(data.lon)) < 0.0001
+                        );
+                    });
+
+                    if (exists) {
+                        alert("Ten szczyt jest już zaznaczony na mapie.");
+                        return;
+                    }
+
+                    //Marker lokalnie tylko na mapie
+                    const newMarker = L.marker([data.lat, data.lon]).addTo(map);
+                    newMarker.bindPopup("<b>Trwa zapisywanie...</b><br><button disabled>Zapisywany</button>")
+                             .openPopup();
+
+                    // === Zapisz marker do bazy ===
+                    fetch('/api/markers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            name: data.name,
+                            latitude: data.lat,
+                            longitude: data.lon,
+                            description: `Szczyt '${data.name}'`
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error("Nie udało się zapisać markera");
+                        return response.json();
+                    })
+                    .then(apiData => {
+                        //po udanym zapisie aktualizujemy popup o ID markera
+                        newMarker.setPopupContent(
+                            `<b>${apiData.name || data.name}</b><br>ID: ${apiData.id}<br><button onclick="removeMarkerById(${apiData.id}, ${markers.length})">Usuń</button>`
+                        );
+                        markers.push(newMarker);
+                    })
+                    .catch(err => {
+                        console.error("Zapis markeru nieudany:", err);
+                        alert("Nie można było zapisać markera.");
+                        map.removeLayer(newMarker);
+                    });
+                })
+                .catch(error => {
+                    console.error("Wyszukiwanie szczytu nieudane:", error);
+                    alert("Nie można znaleźć szczytu.");
+                });
         }
 
-        // Wysłanie zapytania do pythonowego backendu
-        fetch(`/search_peak?q=${encodeURIComponent(peakName)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-
-                map.setView([data.lat, data.lon], 13);
-                var marker = L.marker([data.lat, data.lon]).addTo(map);
-                marker.bindPopup(`<b>${data.name}</b><br><button onclick="removeMarker(${markers.length})">Usuń</button>`).openPopup();
-
-                markers.push(marker);
+        // === WCZYTAJ MARKERY PRZY ŁADOWANIU STRONY ===
+        function loadMarkers() {
+            fetch('/api/markers', {
+                method: 'GET',
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Błąd wczytywania markerów");
+                return response.json();
+            })
+                //rysowanie tych markerow
+            .then(dataArray => {
+                dataArray.forEach(markerData => {
+                    const marker = L.marker([markerData.latitude, markerData.longitude]).addTo(map);
+                    marker.bindPopup(`<b>${markerData.name}</b><br>ID: ${markerData.id}<br><button onclick="removeMarkerById(${markerData.id}, ${markers.length})">Usuń</button>`);
+                    markers.push(marker);
+                });
             })
             .catch(error => {
-                console.error('Błąd:', error);
-                alert("Wystąpił błąd podczas wyszukiwania.");
+                console.error("Nie można pobrać markerów:", error);
             });
-    }
-
-    // Funkcja do usuwania pojedynczego markera
-    function removeMarker(index) {
-        if (markers[index]) {
-            map.removeLayer(markers[index]);
-            markers.splice(index, 1);
         }
-    }
-</script>
+
+        // === WCZYTAJ TRASY PRZY ŁADOWANIU STRONY ===
+        function loadRoutes() {
+            fetch('/api/routes', {
+                method: 'GET',
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(routes => {
+                routes.forEach(route => {
+                    const parsedWaypoints = JSON.parse(route.waypoints).map(point => L.latLng(point[0], point[1]));
+                    const line = L.polyline(parsedWaypoints, { color: 'blue' }).addTo(map);
+                    line.bindPopup(`<b>${route.name}</b><br>ID: ${route.id}<br><button onclick="removeRouteById(${route.id})">Usuń trasę</button>`).openPopup();
+                });
+            })
+            .catch(err => {
+                console.error("Nie można załadować tras:", err);
+            });
+        }
+
+        // === TRYB RYSOWANIA TRAS ===
+        function toggleDrawMode() {
+            drawingRoute = !drawingRoute;
+
+            if (drawingRoute) {
+                routeControlsDiv.style.display = 'inline-block';
+                alert("Tryb rysowania trasy aktywny.\nKliknij na mapie, aby dodać punkty.");
+                routePoints = [];
+                if (currentPolyline) {
+                    map.removeLayer(currentPolyline);
+                }
+                currentPolyline = L.polyline([], { color: 'red' }).addTo(map);
+            } else {
+                routeControlsDiv.style.display = 'none';
+                if (confirm("Czy chcesz zapisać tę trasę?")) {
+                    saveCurrentRoute();
+                } else {
+                    map.removeLayer(currentPolyline);
+                    currentPolyline = null;
+                    routePoints = [];
+                }
+            }
+        }
+
+        // === USUŃ OSTATNI PUNKT ===
+        function removeLastPoint() {
+            if (routePoints.length > 0) {
+                routePoints.pop();
+                if (currentPolyline) {
+                    currentPolyline.setLatLngs(routePoints);
+                }
+                alert("Ostatni punkt został usunięty.");
+            } else {
+                alert("Brak punktów do usunięcia.");
+            }
+        }
+
+        // === ZAMKNIJ TRASĘ (DODAJ PIERWSZY PUNKT NA KONIEC) ===
+        function closeRouteLoop() {
+            if (!currentPolyline) {
+                alert("Rozpocznij najpierw trasę!");
+                return;
+            }
+
+            if (routePoints.length < 1) {
+                alert("Nie możesz zamknąć pustej trasy.");
+                return;
+            }
+
+            const firstPoint = routePoints[0];
+            const lastPoint = routePoints[routePoints.length - 1];
+
+            // Sprawdź, czy już zamknięta
+            if (firstPoint[0] === lastPoint[0] && firstPoint[1] === lastPoint[1]) {
+                alert("Trasa jest już zamknięta.");
+                return;
+            }
+
+            routePoints.push(firstPoint);
+            currentPolyline.setLatLngs(routePoints);
+            alert("Trasa została zamknięta (pętla).");
+        }
+
+        // === ZAPISZ TRASĘ === //
+        function saveCurrentRoute() {
+            if (routePoints.length < 2) {
+                alert("Trasa musi mieć co najmniej 2 punkty.");
+                return;
+            }
+
+            let routeName = prompt("Podaj nazwę trasy", "Moja trasa");
+
+            fetch('/api/routes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    name: routeName,
+                    waypoints: JSON.stringify(routePoints),
+                    description: "Opis trasy"
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Nie udało się zapisać trasy.");
+                return response.json();
+            })
+            .then(() => {
+                alert("Trasa została zapisana!");
+                map.removeLayer(currentPolyline);
+                drawingRoute=false
+                currentPolyline = null;
+                routePoints = [];
+                loadRoutes();  // Załaduj ponownie trasy z bazy
+            })
+            .catch(err => {
+                console.error("Błąd zapisu trasy:", err);
+                alert("Wystąpił błąd przy zapisywaniu trasy.");
+            });
+        }
+
+        // === RYSOWANIE TRASY / DODAWANIE MARKERÓW === technicznie rzecz biorą po prostu obsługa kliknięcia //
+        map.on('click', function(e) {
+            if (drawingRoute) {
+                // Dodanie punktu do trasy
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+                routePoints.push([lat, lng]);
+                currentPolyline.setLatLngs(routePoints);
+            } else {
+                // Dodanie markera
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+
+                const newMarker = L.marker([lat, lng]).addTo(map);
+                newMarker.bindPopup("<b>Nowy marker</b><br><button disabled>Trwa dodawanie...</button>").openPopup();
+
+                fetch('/api/markers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        name: "Szczyt",             //można zmienić w przyszłościu user mógłby to wpisywać
+                        latitude: lat,
+                        longitude: lng,
+                        description: "Piękne miejsce"
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error("Nie udało się dodać markera");
+                    return response.json();
+                })
+                .then(data => {
+                    newMarker.setPopupContent(`<b>Szczyt</b><br>ID: ${data.id}<br><button onclick="removeMarkerById(${data.id}, ${markers.length})">Usuń</button>`);
+                    markers.push(newMarker);
+                })
+                .catch(error => {
+                    console.error('Błąd:', error);
+                    alert('Wystąpił błąd podczas dodawania markera.');
+                    map.removeLayer(newMarker);
+                });
+            }
+        });
+
+
+        function removeMarkerById(markerId, markerIndex) {
+            if (!confirm("Czy na pewno chcesz usunąć ten marker?")) return;
+
+            fetch(`/api/markers/${markerId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Nie można usunąć markera.");
+                return response.json();
+            })
+            .then(() => {
+                alert("Marker został usunięty.");
+                map.removeLayer(markers[markerIndex]);
+                markers.splice(markerIndex, 1);
+            })
+            .catch(err => {
+                console.error("Błąd usuwania markera:", err);
+                alert("Wystąpił błąd.");
+            });
+        }
+
+        // === USUŃ TRASĘ PO ID ===
+        function removeRouteById(routeId) {
+            if (!confirm("Czy na pewno chcesz usunąć tę trasę?")) return;
+
+            fetch(`/api/routes/${routeId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Nie można usunąć trasy.");
+                return response.json();
+            })
+            .then(() => {
+                alert("Trasa została usunięta.");
+                //usuń wszystkie polylines i przeładuj je
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Polyline) {
+                        map.removeLayer(layer);
+                    }
+                });
+                loadRoutes();
+            })
+            .catch(err => {
+                console.error("Błąd usuwania trasy:", err);
+                alert("Wystąpił błąd.");
+            });
+        }
+
+        //=== STARTOWE WCZYTYWANIE === podobno potrzebne w js
+        document.addEventListener("DOMContentLoaded", () => {
+            loadMarkers();
+            loadRoutes();
+        });
+    </script>
 {% endblock %}

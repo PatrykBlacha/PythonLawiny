@@ -1,27 +1,143 @@
-import requests
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
+import requests
 
+# Import pogody
 from weather import *
 from weather_locations import locations
 
+# Inicjalizacja aplikacji
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SECRET_KEY']='tajny klucz'
+app.config['SECRET_KEY'] = 'tajny klucz'
+
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
+login_manager = LoginManager(app)
 login_manager.login_view = "login"
 CORS(app)
 
+#ogólniue kod do fragmentaryzacji ale to nigdy nie działało jak probowalem
+#to mogloby byc w models.py
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
+    markers = db.relationship('Marker', backref='user', lazy=True)
+    routes = db.relationship('Route', backref='user', lazy=True)
+
+
+class Marker(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+
+class Route(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    waypoints = db.Column(db.Text, nullable=False)  # JSON string
+
+
+#załadowanie użytkownika z usermanagera
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+#ROUTY
+#znowu fragmentaryzacja tu powinna wejsc
+
+@app.route('/api/markers', methods=['POST'])
+@login_required
+def add_marker():
+    #można sie pochwalic obsluga wyjatkow
+    try:
+        data = request.json
+        new_marker = Marker(
+            user_id=current_user.id,
+            name=data['name'],
+            latitude=data['latitude'],
+            longitude=data['longitude'],
+            description=data.get('description', '')
+        )
+        db.session.add(new_marker)
+        db.session.commit()
+        return jsonify({'message': 'Marker added successfully', 'id': new_marker.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Error adding marker:", str(e))  # zobaczysz ten błąd w konsoli serwera
+        return jsonify({'error': 'Server error: ' + str(e)}), 500
+
+@app.route('/api/routes', methods=['POST'])
+@login_required
+def add_route():
+    #tu tez moznaby dodac obsluge wyjatkow, jest juz w js ale lepiej miec kod w pythonie
+    data = request.get_json()
+    new_route = Route(
+        user_id=current_user.id,
+        name=data['name'],
+        description=data.get('description', ''),
+        waypoints=data['waypoints']  # to jest string JSONowy
+    )
+    db.session.add(new_route)
+    db.session.commit()
+    return jsonify({'message': 'Route added successfully'}), 201
+
+
+@app.route('/api/routes/<int:route_id>', methods=['DELETE'])
+@login_required
+def delete_route(route_id):
+    route = Route.query.get(route_id)
+    if not route or route.user_id != current_user.id:
+        return jsonify({'error': 'Brak dostępu lub trasa nie istnieje'}), 404
+
+    db.session.delete(route)
+    db.session.commit()
+    return jsonify({'message': 'Trasa usunięta'})
+
+#tu sa nudne zapytania do bazy
+@app.route('/api/markers', methods=['GET'])
+@login_required
+def get_markers():
+    markers = Marker.query.filter_by(user_id=current_user.id).all()
+    return jsonify([{
+        'id': marker.id,
+        'name': marker.name,
+        'latitude': marker.latitude,
+        'longitude': marker.longitude,
+        'description': marker.description
+    } for marker in markers])
+
+@app.route('/api/routes', methods=['GET'])
+@login_required
+def get_routes():
+    routes = Route.query.filter_by(user_id=current_user.id).all()
+    return jsonify([{
+        'id': route.id,
+        'name': route.name,
+        'description': route.description,
+        'waypoints': route.waypoints
+    } for route in routes])
+
+@app.route('/api/markers/<int:marker_id>', methods=['DELETE'])
+@login_required
+def delete_marker(marker_id):
+    marker = Marker.query.get(marker_id)
+    if not marker or marker.user_id != current_user.id:
+        return jsonify({'error': 'Marker not found or unauthorized'}), 404
+    db.session.delete(marker)
+    db.session.commit()
+    return jsonify({'message': 'Marker deleted successfully'})
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -198,5 +314,8 @@ def logout():
 
 
 if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+        print("Baza danych została zainicjalizowana.")
     print(weather_icon(1))
     app.run(debug=True)

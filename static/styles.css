@@ -418,6 +418,14 @@ button{
     border-radius: 4px;
 }
 
+.route-controls{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 15px 0;
+    gap: 10px;
+}
+
 #search-box {
     padding: 8px;
     font-size: 14px;
@@ -426,6 +434,15 @@ button{
 }
 
 #search-button {
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #4CAF50;
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.mapButton {
     padding: 8px 12px;
     font-size: 14px;
     background: #4CAF50;
