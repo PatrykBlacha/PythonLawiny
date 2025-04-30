@@ -5,24 +5,24 @@ from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 import requests
 
+# Import pogody
+from weather import *
+from weather_locations import locations
+
 # Inicjalizacja aplikacji
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SECRET_KEY'] = 'tajny klucz'
 
-# Inicjalizacja rozszerzeń (po utworzeniu app)
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 CORS(app)
 
-# Import funkcji pogodowych
-from weather import *
-from weather_locations import locations
-
-
-# Modele (można je też przenieść do models.py później)
+#ogólniue kod do fragmentaryzacji ale to nigdy nie działało jak probowalem
+#to mogloby byc w models.py
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
@@ -48,16 +48,18 @@ class Route(db.Model):
     waypoints = db.Column(db.Text, nullable=False)  # JSON string
 
 
-# Załadowanie użytkownika
+#załadowanie użytkownika z usermanagera
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 #ROUTY
+#znowu fragmentaryzacja tu powinna wejsc
 
 @app.route('/api/markers', methods=['POST'])
 @login_required
 def add_marker():
+    #można sie pochwalic obsluga wyjatkow
     try:
         data = request.json
         new_marker = Marker(
@@ -78,17 +80,31 @@ def add_marker():
 @app.route('/api/routes', methods=['POST'])
 @login_required
 def add_route():
-    data = request.json
+    #tu tez moznaby dodac obsluge wyjatkow, jest juz w js ale lepiej miec kod w pythonie
+    data = request.get_json()
     new_route = Route(
         user_id=current_user.id,
         name=data['name'],
         description=data.get('description', ''),
-        waypoints=data['waypoints']  # JSON string
+        waypoints=data['waypoints']  # to jest string JSONowy
     )
     db.session.add(new_route)
     db.session.commit()
     return jsonify({'message': 'Route added successfully'}), 201
 
+
+@app.route('/api/routes/<int:route_id>', methods=['DELETE'])
+@login_required
+def delete_route(route_id):
+    route = Route.query.get(route_id)
+    if not route or route.user_id != current_user.id:
+        return jsonify({'error': 'Brak dostępu lub trasa nie istnieje'}), 404
+
+    db.session.delete(route)
+    db.session.commit()
+    return jsonify({'message': 'Trasa usunięta'})
+
+#tu sa nudne zapytania do bazy
 @app.route('/api/markers', methods=['GET'])
 @login_required
 def get_markers():
