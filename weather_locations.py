@@ -8,3 +8,11 @@ locations={
     "Morskie Oko": (49.2012,20.0709),
     "Polana Chochołowska": (49.2365,19.7889)
 }
+
+cameras = {
+    "Kasprowy Wierch": ["http://kamery.topr.pl/gasienicowa/gasie.jpg", "http://kamery.topr.pl/goryczkowa/gorycz.jpg"],
+    "Hala Gąsienicowa": ["http://kamery.topr.pl/hala/hala.jpg"],
+    "Dolina Pięciu Stawów Polskich": ["http://kamery.topr.pl/stawy2/stawy2.jpg","http://kamery.topr.pl/stawy1/stawy1.jpg"],
+    "Morskie Oko": ["http://kamery.topr.pl/moko/moko_01.jpg","http://kamery.topr.pl/moko_TPN/moko_02.jpg"],
+    "Polana Chochołowska": ["http://kamery.topr.pl/chocholowska/chocholow.jpg","http://kamery.topr.pl/chocholowska2/chochol2.JPG"]
+}

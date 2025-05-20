@@ -376,5 +376,40 @@
             loadMarkers();
             loadRoutes();
         });
+
+const avalancheControl = L.control({ position: 'topleft' });
+let avalancheOverlay = L.imageOverlay('/generate_png', [[49.306527778, 19.641805556], [49.14125, 20.30625]], {
+    opacity: 0.5,
+    interactive: false
+});
+let overlayVisible = false;
+
+avalancheControl.onAdd = function (map) {
+    const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+    div.innerHTML = '⛷️';
+    div.title = 'Nakładka lawinowa';
+
+    div.onclick = function () {
+        if (overlayVisible) {
+            map.removeLayer(avalancheOverlay);
+            div.classList.remove('active');
+            overlayVisible = false;
+        } else {
+            avalancheOverlay.addTo(map);
+            div.classList.add('active');
+            overlayVisible = true;
+        }
+    };
+
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    return div;
+};
+
+avalancheControl.addTo(map);
+
+
     </script>
+
 {% endblock %}
+

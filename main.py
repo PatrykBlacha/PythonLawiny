@@ -1,13 +1,17 @@
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app
+import requests
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app, send_file, \
+    send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
-import requests
+import rasterio
 
-# Import pogody
 from weather import *
-from weather_locations import locations
+from weather_locations import *
+from avalanche_danger import danger_table, get_avalanche_risk_topr, avalanche_png, get_bounds_from_dem
+
+PNG_PATH = 'static/risk_map.png'
 
 # Inicjalizacja aplikacji
 app = Flask(__name__)
@@ -21,8 +25,9 @@ login_manager = LoginManager(app)
 login_manager.login_view = "login"
 CORS(app)
 
-#ogólniue kod do fragmentaryzacji ale to nigdy nie działało jak probowalem
-#to mogloby byc w models.py
+
+# ogólniue kod do fragmentaryzacji ale to nigdy nie działało jak probowalem
+# to mogloby byc w models.py
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
@@ -48,18 +53,19 @@ class Route(db.Model):
     waypoints = db.Column(db.Text, nullable=False)  # JSON string
 
 
-#załadowanie użytkownika z usermanagera
+# załadowanie użytkownika z usermanagera
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-#ROUTY
-#znowu fragmentaryzacja tu powinna wejsc
+
+# ROUTY
+# znowu fragmentaryzacja tu powinna wejsc
 
 @app.route('/api/markers', methods=['POST'])
 @login_required
 def add_marker():
-    #można sie pochwalic obsluga wyjatkow
+    # można sie pochwalic obsluga wyjatkow
     try:
         data = request.json
         new_marker = Marker(
@@ -77,10 +83,11 @@ def add_marker():
         print("Error adding marker:", str(e))  # zobaczysz ten błąd w konsoli serwera
         return jsonify({'error': 'Server error: ' + str(e)}), 500
 
+
 @app.route('/api/routes', methods=['POST'])
 @login_required
 def add_route():
-    #tu tez moznaby dodac obsluge wyjatkow, jest juz w js ale lepiej miec kod w pythonie
+    # tu tez moznaby dodac obsluge wyjatkow, jest juz w js ale lepiej miec kod w pythonie
     data = request.get_json()
     new_route = Route(
         user_id=current_user.id,
@@ -104,11 +111,13 @@ def delete_route(route_id):
     db.session.commit()
     return jsonify({'message': 'Trasa usunięta'})
 
-#tu sa nudne zapytania do bazy
+
+# tu sa nudne zapytania do bazy
 @app.route('/api/markers', methods=['GET'])
-@login_required
+# @login_required
 def get_markers():
-    markers = Marker.query.filter_by(user_id=current_user.id).all()
+    # markers = Marker.query.filter_by(user_id=current_user.id).all()
+    markers = Marker.query.all()
     return jsonify([{
         'id': marker.id,
         'name': marker.name,
@@ -117,16 +126,19 @@ def get_markers():
         'description': marker.description
     } for marker in markers])
 
+
 @app.route('/api/routes', methods=['GET'])
 @login_required
 def get_routes():
     routes = Route.query.filter_by(user_id=current_user.id).all()
+    # routes = Route.query.all()
     return jsonify([{
         'id': route.id,
         'name': route.name,
         'description': route.description,
         'waypoints': route.waypoints
     } for route in routes])
+
 
 @app.route('/api/markers/<int:marker_id>', methods=['DELETE'])
 @login_required
@@ -146,16 +158,31 @@ def load_user(user_id):
 
 @app.route("/")
 def home():
-    t, cc, w,sd = current_weather(49.2319,19.9817)
-    return render_template("index.html",temperature=round(t),cloud_cover=round(cc,2),wind=round(w,2),snow_depth=100*round(sd,4),locations=locations)
+    t, cc, w, sd = current_weather(49.2319, 19.9817)
+
+    return render_template("index.html",
+                           temperature=round(t),
+                           cloud_cover=round(cc, 2),
+                           wind=round(w, 2),
+                           snow_depth=100 * round(sd, 4),
+                           locations=locations)
+
 
 @app.context_processor
 def inject_locations():
     return {'locations': locations}
 
+
 @app.route("/map")
 def mapa():
     return render_template("map.html")
+
+
+@app.route('/generate_png')
+def generate_png():
+    avalanche_png()
+    return send_file(PNG_PATH, mimetype='image/png')
+
 
 @app.route("/search_peak", methods=["GET"])
 def search_peak():
@@ -186,81 +213,101 @@ def search_peak():
 
     return jsonify(result)
 
+
 @app.route("/pogoda/<location>")
 def weather(location):
     location = location.replace("_", " ")
-    latitude,longitude=locations.get(location)
-    forecast=forecast_5days(latitude,longitude)
-    t, cc, w, sd = current_weather(latitude,longitude)
+    latitude, longitude = locations.get(location)
+    forecast = forecast_5days(latitude, longitude)
+    t, cc, w, sd = current_weather(latitude, longitude)
 
-    return render_template("weather.html",temperature=round(t), cloud_cover=round(cc, 2), wind=round(w, 2), forecast=forecast,
-                           snow_depth=round(sd*100, 2),location=location,locations=locations,latitude=latitude,longitude=longitude)
+    if location in cameras:
+        camera_links = cameras[location]
+    else:
+        camera_links = []
+
+    return render_template("weather.html", temperature=round(t), cloud_cover=round(cc, 2), wind=round(w, 2),
+                           forecast=forecast,
+                           snow_depth=round(sd * 100, 2), location=location, locations=locations, latitude=latitude,
+                           longitude=longitude, cameras=camera_links)
+
 
 @app.route("/api/temperature_plot/<location>")
 def generate_temperature_plot(location):
     location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    forecast=forecast_5days(latitude,longitude)
-    plot= get_forecast_plots(forecast,latitude,longitude, False)
+    forecast = forecast_5days(latitude, longitude)
+    plot = get_forecast_plots(forecast, latitude, longitude, False)
     return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
 
 @app.route("/api/visibility_plot/<location>")
 def generate_visibility_plot(location):
     location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    forecast=forecast_5days(latitude,longitude)
-    plot= visibility_plot(forecast,latitude,longitude)
+    forecast = forecast_5days(latitude, longitude)
+    plot = visibility_plot(forecast, latitude, longitude)
     return f'<img src="/{plot}" alt="Wykres widoczności" style="max-width: 100%;">'
+
+
 @app.route("/api/historical_temperature_plot/<location>")
 def generate_historical_temperature_plot(location):
     location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    forecast=get_historical_weather(latitude,longitude)
-    plot= get_forecast_plots(forecast,latitude,longitude,True)
+    forecast = get_historical_weather(latitude, longitude)
+    plot = get_forecast_plots(forecast, latitude, longitude, True)
     return f'<img src="/{plot}" alt="Wykres temperatury" style="max-width: 100%;">'
+
 
 @app.route("/api/historical_wind_plot/<location>")
 def generate_historical_wind_plot(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
     forecast = get_historical_weather(latitude, longitude)
-    plot= get_wind_plot(forecast,latitude,longitude,True)
+    plot = get_wind_plot(forecast, latitude, longitude, True)
     return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
+
 
 @app.route("/api/wind_plot/<location>")
 def generate_wind_plot(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
     forecast = forecast_5days(latitude, longitude)
-    plot= get_wind_plot(forecast,latitude,longitude,False)
+    plot = get_wind_plot(forecast, latitude, longitude, False)
     return f'<img src="/{plot}" alt="Wykres wiatru" style="max-width: 100%;">'
+
 
 @app.route("/api/historical_snow_plot/<location>")
 def generate_historical_snow_plot(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
     forecast = get_historical_weather(latitude, longitude)
-    plot= snow_depth_plot(forecast,latitude,longitude,True)
+    plot = snow_depth_plot(forecast, latitude, longitude, True)
     return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+
 
 @app.route("/api/snow_plot/<location>")
 def generate_snow_plot(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
     forecast = forecast_5days(latitude, longitude)
-    plot= snow_depth_plot(forecast,latitude,longitude,False)
+    plot = snow_depth_plot(forecast, latitude, longitude, False)
     return f'<img src="/{plot}" alt="pokrywa sniezna" style="max-width: 100%;">'
+
+
 @app.route("/api/forecast/<location>")
 def generate_forecast(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    return weather_table(latitude,longitude)
+    return weather_table(latitude, longitude)
+
 
 @app.route("/api/danger/<location>")
 def generate_danger(location):
-    location = location.replace("_"," ")
+    location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    return danger_table(latitude,longitude)
+    return danger_table(latitude, longitude)
+
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -299,10 +346,12 @@ def login():
 
     return render_template("login.html")
 
+
 @app.route('/profile')
 @login_required
 def profile():
     return render_template('profile.html', user=current_user)
+
 
 @app.route("/logout")
 @login_required
@@ -312,10 +361,10 @@ def logout():
     return redirect(url_for("home"))
 
 
-
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         print("Baza danych została zainicjalizowana.")
     print(weather_icon(1))
+    print(get_avalanche_risk_topr())
     app.run(debug=True)

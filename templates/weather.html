@@ -50,10 +50,10 @@
                 <h3>Czynniki zwiększające zagrożenie lawinowe</h3>
                 <div class="legend" style="margin-top: 20px; text-align: center;">
                 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    <div><img src="/static/achtung.png" style="height: 20px;"> - nowe zagrożenie</div>
-                    <div><img src="/static/pomaranczowe_kolko.png" style="height: 20px;"> - utrzymujące się zagrożenie</div>
-                    <div><img src="/static/zolte_kolko.png" style="height: 20px;"> - zagrożenie zanikające</div>
-                    <div><img src="/static/szare_kolko.png" style="height: 20px;"> - brak czynników</div>
+                    <div><img src="/static/avalanche_icons/achtung.png" style="height: 20px;"> - nowe zagrożenie</div>
+                    <div><img src="/static/avalanche_icons/pomaranczowe_kolko.png" style="height: 20px;"> - utrzymujące się zagrożenie</div>
+                    <div><img src="/static/avalanche_icons/zolte_kolko.png" style="height: 20px;"> - zagrożenie zanikające</div>
+                    <div><img src="/static/avalanche_icons/szare_kolko.png" style="height: 20px;"> - brak czynników</div>
                 </div>
             </div>
                 <div id="danger-table" class="table-container" style="text-align: center;">
@@ -71,10 +71,24 @@
                 <div id="snow-depth-plot" style="text-align: center;">
                     <div class="loader">Ładowanie wykresu pokrywy śnieżnej...</div>
                 </div>
+<!--                <tr>-->
+<!--                    <td style="vertical-align: middle; text-align: center;">-->
+<!--                    <a name="Morskie_Oko_Rysy"></a><img style="width: 720px; height: 480px;" alt="Kamera TOPR Morskie Oko kamera 1" src="http://kamery.topr.pl/moko/moko_01.jpg" />-->
+<!--                </tr>-->
+                <h2>Kamery dla: {{ location }}</h2>
+
+                {% if cameras %}
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        {% for camera in cameras %}
+                            <img src="{{ camera }}" alt="Kamera {{ location }}" style="width: 720px; height: 480px;"><br>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p>Brak kamer dla tej lokalizacji.</p>
+                {% endif %}
             </div>
 
             <div id="history-content" style="display: none; text-align: center;">
-                <p>Tu będzie pogoda historyczna</p>
                 <div id="historical_temperature-plot" style="text-align: center;">
                     <div class="loader">Ładowanie wykresu temperatury...</div>
                 </div>
