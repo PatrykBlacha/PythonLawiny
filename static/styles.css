@@ -469,3 +469,22 @@ button{
     object-fit: contain;
 }
 
+.leaflet-control-custom {
+    z-index: 10000 !important;
+    background-color: white;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.leaflet-control-custom:hover {
+    background-color: #f0f0f0;
+}
+
+.leaflet-control-custom.active {
+    background-color: #d0d0d0;
+}

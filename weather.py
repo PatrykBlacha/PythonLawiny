@@ -53,10 +53,6 @@ def forecast_5days(latitude,longitude):
     responses = openmeteo.weather_api(url, params=params)
 
     response = responses[0]
-    print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
-    print(f"Elevation {response.Elevation()} m asl")
-    print(f"Timezone {response.Timezone()}{response.TimezoneAbbreviation()}")
-    print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
 
     hourly = response.Hourly()
     hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
@@ -180,7 +176,7 @@ def get_wind_plot(forecast, latitude, longitude,historical):
             wind_plot_filename = f"static/plots/wind_plot_{latitude}_{longitude}.png"
         else:
             wind_plot_filename= f"static/plots/historical_wind_plot_{latitude}_{longitude}.png"
-        img = Image.open("static/pngegg.png")
+        img = Image.open("static/weather_icons/pngegg.png")
         img = img.convert("RGBA")
         arrow_img = np.array(img)
 
@@ -353,118 +349,3 @@ def get_historical_weather(latitude,longitude):
 
     hourly_dataframe = pd.DataFrame(data=hourly_data)
     return hourly_dataframe
-
-def danger_table(latitude,longitude):
-    url = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "daily": ["temperature_2m_max", "rain_sum", "snowfall_sum", "wind_gusts_10m_max", "temperature_2m_min"],
-        "hourly": "snow_depth",
-        "timezone": "auto",
-        "past_days": 5,
-        "forecast_days": 6
-    }
-    responses = openmeteo.weather_api(url, params=params)
-
-    # Process first location. Add a for-loop for multiple locations or weather models
-    response = responses[0]
-
-    hourly = response.Hourly()
-    hourly_snow_depth = hourly.Variables(0).ValuesAsNumpy()
-
-    hourly_data = {"date": pd.date_range(
-        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-        freq=pd.Timedelta(seconds=hourly.Interval()),
-        inclusive="left"
-    ), "snow_depth": hourly_snow_depth}
-
-
-    hourly_dataframe = pd.DataFrame(data=hourly_data)
-    hourly_dataframe['day'] = hourly_dataframe['date'].dt.date
-    daily_max_snow = hourly_dataframe.groupby('day')['snow_depth'].max().reset_index()
-
-    # Process daily data. The order of variables needs to be the same as requested.
-    daily = response.Daily()
-    daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
-    daily_rain_sum = daily.Variables(1).ValuesAsNumpy()
-    daily_snowfall_sum = daily.Variables(2).ValuesAsNumpy()
-    daily_wind_gusts_10m_max = daily.Variables(3).ValuesAsNumpy()
-    daily_temperature_2m_min = daily.Variables(4).ValuesAsNumpy()
-
-    daily_data = {"date": pd.date_range(
-        start=pd.to_datetime(daily.Time(), unit="s", utc=True),
-        end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
-        freq=pd.Timedelta(seconds=daily.Interval()),
-        inclusive="left"
-    ), "temperature_2m_max": daily_temperature_2m_max, "rain_sum": daily_rain_sum, "snowfall_sum": daily_snowfall_sum,
-        "wind_gusts_10m_max": daily_wind_gusts_10m_max, "temperature_2m_min": daily_temperature_2m_min}
-
-
-    daily_dataframe = pd.DataFrame(data=daily_data)
-
-    icons=['<img src="/static/szare_kolko.png">' for _ in range(len(daily_dataframe))]
-    for idx in range(len(daily_dataframe)):
-        text = ''
-        snow_today = daily_max_snow[daily_max_snow['day'] == daily_dataframe['date'][idx].date()]
-        if not snow_today.empty:
-            snow_depth_today = snow_today['snow_depth'].values[0]
-            if snow_depth_today==0:
-                continue
-        else:
-            continue
-
-        days_min=0
-        days_max=0
-        if daily_wind_gusts_10m_max[idx]>40:
-            conditions=2
-            text = 'silny wiatr'
-            days_min=2
-            days_max=4
-        if daily_temperature_2m_max[idx] < -8:
-            conditions=2
-            if text:
-                text+=', niska temperatura'
-            else:
-                text='niska temperatura'
-        if daily_wind_gusts_10m_max[idx]<25 and daily_temperature_2m_max[idx]<0 and daily_temperature_2m_min[idx]>-10:
-            conditions=0
-        else:
-            conditions=1
-        if conditions==2 and daily_snowfall_sum[idx]>=15 or conditions==1 and daily_snowfall_sum[idx]>=25 or conditions==0 and daily_snowfall_sum[idx]>=40:
-            if text:
-                text+=', duże opady śniegu'
-            else:
-                text='duże opady śniegu'
-            if not days_min:
-                days_min, days_max=1,3
-        if daily_temperature_2m_max[idx]-daily_temperature_2m_min[idx]>10:
-            if not days_min:
-                days_min, days_max = 1, 3
-            if not text:
-                text='duży wzrost temperatury'
-            else: text+=', duży wzrost temperatury'
-
-        if daily_rain_sum[idx]>10 and snow_depth_today>0:
-            if not days_min:
-                days_min, days_max = 1, 2
-            if not text:
-                text='deszcz na śnieg'
-            else: text+=', deszcz na śnieg'
-        if text:
-            icons[idx]=f'<img src="/static/achtung.png" title="{text}">'
-            for i in range(idx+1,min(idx+days_min+1,len(daily_dataframe))):
-                icons[i] = f'<img src="/static/pomaranczowe_kolko.png" title="{text}">'
-            for i in range(idx+days_min+1,min(idx+days_max+1,len(daily_dataframe))):
-                icons[i] = f'<img src="/static/zolte_kolko.png" title="{text}">'
-
-
-    daily_dataframe['icon'] = icons
-    table_data = daily_dataframe[['date', 'icon']][daily_dataframe['date'].dt.date>=datetime.date.today()]
-    table_data['date'] = table_data['date'].apply(lambda x: x.strftime("%d-%m"))
-    table_data=table_data.transpose()
-    html_table = table_data.to_html(classes='table table-striped',index=False, escape=False, header=False)
-
-    return html_table
-
