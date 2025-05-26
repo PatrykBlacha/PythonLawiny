@@ -67,30 +67,28 @@ def delete_route(route_id):
 
 # tu sa nudne zapytania do bazy
 @app.route('/api/markers', methods=['GET'])
-# @login_required
+@login_required
 def get_markers():
-    # markers = Marker.query.filter_by(user_id=current_user.id).all()
     markers = Marker.query.all()
     return jsonify([{
-        'id': marker.id,
-        'name': marker.name,
-        'latitude': marker.latitude,
-        'longitude': marker.longitude,
-        'description': marker.description
-    } for marker in markers])
+        'id': m.id,
+        'name': m.name,
+        'latitude': m.latitude,
+        'longitude': m.longitude,
+        'description': m.description
+    } for m in markers])
 
 
 @app.route('/api/routes', methods=['GET'])
 @login_required
 def get_routes():
-    routes = Route.query.filter_by(user_id=current_user.id).all()
-    # routes = Route.query.all()
+    routes = Route.query.all()
     return jsonify([{
-        'id': route.id,
-        'name': route.name,
-        'description': route.description,
-        'waypoints': route.waypoints
-    } for route in routes])
+        'id': r.id,
+        'name': r.name,
+        'waypoints': r.waypoints,
+        'description': r.description
+    } for r in routes])
 
 
 @app.route('/api/markers/<int:marker_id>', methods=['DELETE'])
@@ -312,3 +310,37 @@ def logout():
     logout_user()
     flash("Wylogowano!", "info")
     return redirect(url_for("home"))
+
+@app.route('/api/markers/<int:marker_id>', methods=['PUT'])
+@login_required
+def update_marker(marker_id):
+    data = request.get_json()
+    marker = Marker.query.get_or_404(marker_id)
+
+    if marker.user_id != current_user.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    marker.name = data.get("name", marker.name)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route('/api/routes/<int:route_id>', methods=['PUT'])
+@login_required
+def update_route(route_id):
+    data = request.get_json()
+    route = Route.query.get_or_404(route_id)
+
+    if route.user_id != current_user.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    route.name = data.get("name", route.name)
+    route.description = data.get("description", route.description)
+    route.waypoints = data.get("waypoints", route.waypoints)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+
+
+
