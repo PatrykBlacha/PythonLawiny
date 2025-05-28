@@ -19,6 +19,7 @@
         <button onclick="searchPeak()" id="search-button">Szukaj</button>
         <button onclick="toggleDrawMode()" class="mapButton">Przełącz tryb tworzenia trasy</button>
         <button id="save-route-button" onclick="saveCurrentRoute()" class="mapButton" style="display: none;">Zapisz trasę</button>
+        <button id="add-avalanche-button" onclick="enableAvalancheMode()" class="mapButton">Dodaj lawinę</button>
     </div>
 
     <div class="route-controls" style="display: none;">
@@ -52,6 +53,28 @@
         var routePoints = [];
         var currentPolyline = null;
         var drawingRoute = false;
+        let avalancheMode = false;
+
+        function enableAvalancheMode() {
+            avalancheMode = true;
+            alert("Tryb dodawania lawiny włączony.\nKliknij na mapie, aby dodać znacznik lawinowy.");
+        }
+
+        function loadAvalancheMarkers() {
+            fetch('/api/avalanche_markers')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(marker => {
+                        const avalancheMarker = L.marker([marker.latitude, marker.longitude]).addTo(map);
+                        avalancheMarker.bindPopup(
+                            `<b>Lawina</b><br>${marker.description}<br><i>Dodano: ${marker.created_at}</i>`
+                        );
+                    });
+                })
+                .catch(error => {
+                    console.error('Błąd podczas ładowania znaczników lawin:', error);
+                });
+        }
 
         const routeControlsDiv = document.querySelector('.route-controls');
 
@@ -334,7 +357,45 @@
                 const lng = e.latlng.lng;
                 routePoints.push([lat, lng]);
                 currentPolyline.setLatLngs(routePoints);
-            } else {
+            } else if (avalancheMode) {
+              const desc = prompt("Podaj krótki opis lawiny:");
+              if (desc === null) {
+                  alert("Anulowano dodawanie lawiny.");
+                  avalancheMode = false;
+                  return;
+              }
+
+              // Bez ikony, domyślna Leafletowa
+              const avalancheMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+              avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}`).openPopup();
+
+              const currentDate = new Date().toISOString();
+
+              fetch('/api/avalanche_markers', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                      latitude: e.latlng.lat,
+                      longitude: e.latlng.lng,
+                      description: desc
+                  })
+              })
+              .then(response => {
+                  if (!response.ok) throw new Error("Nie udało się dodać znacznika lawinowego.");
+                  return response.json();
+              })
+              .then(data => {
+                  avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}<br>Dodano: ${data.created_at}`);
+              })
+              .catch(err => {
+                  console.error("Błąd zapisu lawiny:", err);
+                  alert("Nie udało się zapisać znacznika lawinowego.");
+                  map.removeLayer(avalancheMarker);
+              });
+
+              avalancheMode = false;
+          } else {
                 // Dodanie markera
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
@@ -435,6 +496,7 @@
         document.addEventListener("DOMContentLoaded", () => {
             loadMarkers();
             loadRoutes();
+            loadAvalancheMarkers();
         });
 
         const avalancheControl = L.control({ position: 'topleft' });
@@ -520,11 +582,6 @@
                 alert("Nie udało się zaktualizować trasy.");
             });
         }
-
-
-
-
     </script>
 
 {% endblock %}
-

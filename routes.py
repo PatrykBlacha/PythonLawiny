@@ -340,6 +340,35 @@ def update_route(route_id):
     db.session.commit()
     return jsonify({"success": True})
 
+from datetime import datetime
+
+@app.route('/api/avalanche_markers', methods=['POST'])
+@login_required
+def add_avalanche_marker():
+    data = request.get_json()
+    new_marker = AvalancheMarker(
+        user_id=current_user.id,
+        latitude=data['latitude'],
+        longitude=data['longitude'],
+        description=data.get('description', ''),
+        created_at=datetime.now()
+    )
+    db.session.add(new_marker)
+    db.session.commit()
+    return jsonify({'message': 'Avalanche marker added successfully'}), 201
+
+
+@app.route('/api/avalanche_markers', methods=['GET'])
+def get_avalanche_markers():
+    markers = AvalancheMarker.query.order_by(AvalancheMarker.created_at.desc()).all()
+    return jsonify([{
+        'id': m.id,
+        'latitude': m.latitude,
+        'longitude': m.longitude,
+        'description': m.description,
+        'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+        'username': m.user.username
+    } for m in markers])
 
 
 
