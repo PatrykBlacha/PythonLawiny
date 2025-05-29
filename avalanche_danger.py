@@ -5,10 +5,9 @@ import requests_cache
 from PIL import Image
 from retry_requests import retry
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
 import rasterio
 import numpy as np
+from weather import current_weather
 
 PNG_PATH='static/risk_map.png'
 
@@ -126,37 +125,40 @@ def danger_table(latitude,longitude):
     table_data=table_data.transpose()
     html_table = table_data.to_html(classes='table table-striped',index=False, escape=False, header=False)
 
-    return html_table
+    today_icon = daily_dataframe.loc[
+        daily_dataframe['date'].dt.date == datetime.date.today(), 'icon'
+    ].values
+
+    add_to_risk = 0
+    if len(today_icon) > 0:
+        if "achtung.png" in today_icon[0] or "pomaranczowe_kolko.png" in today_icon[0]:
+            add_to_risk += 2
+        elif "zolte_kolko.png" in today_icon[0]:
+            add_to_risk += 1
+
+    return html_table,add_to_risk
 
 
 TOPR_URL = "https://lawiny.topr.pl"
 def get_avalanche_risk_topr():
-    # to jeszcze zastapie jakims ogolnym algorytmem z 5-stopniowa skalą bo nie ma api a scrapowanie nie dziala
-    response = requests.get(TOPR_URL)
-    if response.status_code != 200:
-        print("Błąd połączenia z TOPR")
+    # wyznaczone na podstawie grubosci pokrywy snieznej na kasprowym wierchu i czynników zwiększających zagrożenie
+    # nie jest to żaden użyteczny wzór,
+    # jest użyty tylko w celu zasymulowania danych, które docelowo powinny być udostępniane przez topr
+    _,_,_,snow_depth = current_weather(49.2319,19.9817)
+    _,add=danger_table(49.2319,19.9817)
+    if snow_depth>150:
+        return 3 + add
+    elif snow_depth>80:
+        return 2 + add
+    elif snow_depth>50:
+        return 1+add
+    elif snow_depth>30:
+        return 1 + add//2
+    else:
         return 0
 
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    risk_section = soup.find("div", class_="stopien-lawin")
-    if not risk_section:
-        print("Nie znaleziono komunikatu lawinowego.")
-        return 3
-
-    risk_text = risk_section.get_text(strip=True)
-    print("Komunikat lawinowy TOPR:")
-    print(risk_text)
-
-    for level in range(1, 6):
-        if str(level) in risk_text:
-            print(f"Obecny stopień zagrożenia lawinowego: {level}")
-            return level
-
-    print("Nie znaleziono stopnia zagrożenia lawinowego.")
-    return 0
-
 def is_snow_wet():
+    # moznaby uwzglednic wysokosc npm
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": 49.2319,
@@ -192,16 +194,17 @@ def generate_risk_map():
         res_y_meters = res_y * meters_per_degree_lat
 
         dzdx = np.gradient(dem_data, axis=1) / res_x_meters
+        # pochodne obliczone metoda ilorazow roznicowych, na brzegach pochodne jednostronne,
+        # w pozostalych punktach obustronne
         dzdy = np.gradient(dem_data, axis=0) / res_y_meters
         slope = np.degrees(np.arctan(np.sqrt(dzdx**2 + dzdy**2)))
-        aspect=np.degrees(np.arctan2(dzdy, dzdx))
-        aspect = (aspect + 360) % 360
+        aspect = (90 - np.degrees(np.arctan2(dzdy, dzdx))) % 360
+
         risk_map = np.full_like(slope, 2**get_avalanche_risk_topr())
         risk_map[(slope > 35) & (slope < 40)] /= 2
         risk_map[(slope > 30) & (slope < 35)] /= 3
         risk_map[(slope < 30)] /= 4
 
-        # tu jeszcze jakiś if o mokrym śniegu
         if not is_snow_wet():
             risk_map[((aspect > 45) & (aspect < 67.5)) | ((aspect > 292.5) & (aspect < 315))] /= 2
             risk_map[(aspect > 67.5) & (aspect < 292.5)] /= 3
@@ -209,11 +212,6 @@ def generate_risk_map():
         # risk map mozna wykorzystac do szukania optymalnej trasy
         return risk_map
 def avalanche_png():
-    # if os.path.exists(PNG_PATH):
-    #     last_modified_time = os.path.getmtime(PNG_PATH)
-    #     current_time = time.time()
-    #     if current_time - last_modified_time < 6 * 3600:
-    #         return
     if os.path.exists(PNG_PATH):
         last_modified_time = os.path.getmtime(PNG_PATH)
         last_mod_date = datetime.datetime.fromtimestamp(last_modified_time).date()
@@ -223,8 +221,7 @@ def avalanche_png():
             return
     risk_map=generate_risk_map()
 
-    # norm_risk = ((risk_map - risk_map.min()) / (risk_map.max() - risk_map.min()) * 255).astype(np.uint8)
-    # img = Image.fromarray(norm_risk, mode='L').convert('RGBA')
+
     img = Image.new('RGBA', (risk_map.shape[1], risk_map.shape[0]))
     colormap = {
         1: (0, 255, 0, 100),    # green low

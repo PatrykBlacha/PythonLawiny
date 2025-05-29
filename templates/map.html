@@ -28,6 +28,20 @@
 
     <div id="map"></div>
 
+    <div id="route-info" class="route-info">
+    <h3>Statystyki trasy</h3>
+    <ul>
+        <li><strong>Długość:</strong> <span id="route-length">0 km</span></li>
+        <li><strong>Przewyższenia w górę:</strong> <span id="elevation-up">0 m</span></li>
+        <li><strong>Przewyższenia w dół:</strong> <span id="elevation-down">0 m</span></li>
+    </ul>
+        <button onclick="loadElevationChart()" class="btn-profile">Pokaż profil wysokości</button>
+    <div id="elevation-chart-container" style="display:none; margin-top:15px;">
+        <img id="elevation-chart" alt="Profil wysokości trasy" style="width:100%; border-radius: 8px;" />
+    </div>
+</div>
+
+
     <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
             integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
             crossorigin=""></script>
@@ -42,10 +56,17 @@
 
         var markers = [];
         var routePoints = [];
+        var routeSegments=[];
         var currentPolyline = null;
         var drawingRoute = false;
 
-        const routeControlsDiv = document.querySelector('.route-controls');
+        let totalLength = 0;
+        let totalElevationGain = 0;
+        let totalElevationLoss = 0;
+        let routeMarkers = [];
+
+
+        let routeControlsDiv = document.querySelector('.route-controls');
 
         function searchPeak() {
             var peakName = document.getElementById('search-box').value;
@@ -167,14 +188,29 @@
             });
         }
 
+        function hideElevationChart() {
+            document.getElementById('elevation-chart-container').style.display = 'none';
+            document.getElementById('elevation-chart').src = '';
+        }
+
+
         // === TRYB RYSOWANIA TRAS ===
         function toggleDrawMode() {
             drawingRoute = !drawingRoute;
+            routeMarkers.forEach(marker => map.removeLayer(marker));
+            routeMarkers = [];
+            routePoints = [];
+            routeSegments=[];
+
+
 
             if (drawingRoute) {
                 routeControlsDiv.style.display = 'inline-block';
                 alert("Tryb rysowania trasy aktywny.\nKliknij na mapie, aby dodać punkty.");
-                routePoints = [];
+                totalLength = 0;
+                totalElevationGain = 0;
+                totalElevationLoss = 0;
+
                 if (currentPolyline) {
                     map.removeLayer(currentPolyline);
                 }
@@ -184,7 +220,9 @@
                 if (confirm("Czy chcesz zapisać tę trasę?")) {
                     saveCurrentRoute();
                 } else {
-                    map.removeLayer(currentPolyline);
+                    if (currentPolyline) {
+                         map.removeLayer(currentPolyline);
+                    }
                     currentPolyline = null;
                     routePoints = [];
                 }
@@ -194,11 +232,9 @@
         // === USUŃ OSTATNI PUNKT ===
         function removeLastPoint() {
             if (routePoints.length > 0) {
-                routePoints.pop();
-                if (currentPolyline) {
-                    currentPolyline.setLatLngs(routePoints);
-                }
-                alert("Ostatni punkt został usunięty.");
+                const marker = routeMarkers.pop();
+                map.removeLayer(marker);
+                removeLastSegment();
             } else {
                 alert("Brak punktów do usunięcia.");
             }
@@ -219,16 +255,60 @@
             const firstPoint = routePoints[0];
             const lastPoint = routePoints[routePoints.length - 1];
 
+
             // Sprawdź, czy już zamknięta
             if (firstPoint[0] === lastPoint[0] && firstPoint[1] === lastPoint[1]) {
                 alert("Trasa jest już zamknięta.");
                 return;
             }
+            addPoint(firstPoint[0],firstPoint[1])
+<!--            alert("Trasa została zamknięta (pętla).");-->
+            }
 
-            routePoints.push(firstPoint);
-            currentPolyline.setLatLngs(routePoints);
-            alert("Trasa została zamknięta (pętla).");
+function drawFullRoute(geoJson) {
+    if (currentPolyline) {
+        map.removeLayer(currentPolyline);
+    }
+
+    currentPolyline = L.geoJSON(geoJson, {
+        style: {
+            color: '#333',        // ciemnoszary kolor
+            weight: 8,            // grubość linii
+            dashArray: '8, 10'    // przerywana linia
         }
+    }).addTo(map);
+}
+
+
+function removeLastSegment() {
+    hideElevationChart();
+    fetch('/api/route/trim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points: routePoints })
+    })
+    .then(res => res.json())
+    .then(data => {
+        routePoints = data.points;
+
+        // Narysuj nową trasę na podstawie danych z backendu
+        drawFullRoute(data.routeGeoJson);
+
+        // Zaktualizuj segmenty trasy na podstawie nowych danych
+        routeSegments = [data.routeGeoJson];
+
+        // Zaktualizuj statystyki
+        updateRouteInfo(data.length, data.elevationGain, data.elevationLoss);
+        totalLength = data.length;
+        totalElevationGain = data.elevationGain;
+        totalElevationLoss = data.elevationLoss;
+    })
+    .catch(err => {
+        console.error("Błąd przy usuwaniu ostatniego odcinka:", err);
+        alert("Nie udało się cofnąć trasy.");
+    });
+}
+
 
         // === ZAPISZ TRASĘ === //
         function saveCurrentRoute() {
@@ -247,7 +327,7 @@
                 credentials: 'include',
                 body: JSON.stringify({
                     name: routeName,
-                    waypoints: JSON.stringify(routePoints),
+                    waypoints: routePoints,
                     description: "Opis trasy"
                 })
             })
@@ -269,51 +349,122 @@
             });
         }
 
+
         // === RYSOWANIE TRASY / DODAWANIE MARKERÓW === technicznie rzecz biorą po prostu obsługa kliknięcia //
-        map.on('click', function(e) {
-            if (drawingRoute) {
-                // Dodanie punktu do trasy
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
-                routePoints.push([lat, lng]);
-                currentPolyline.setLatLngs(routePoints);
-            } else {
-                // Dodanie markera
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
 
-                const newMarker = L.marker([lat, lng]).addTo(map);
-                newMarker.bindPopup("<b>Nowy marker</b><br><button disabled>Trwa dodawanie...</button>").openPopup();
 
-                fetch('/api/markers', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        name: "Szczyt",             //można zmienić w przyszłościu user mógłby to wpisywać
-                        latitude: lat,
-                        longitude: lng,
-                        description: "Piękne miejsce"
-                    })
-                })
-                .then(response => {
-                    if (!response.ok) throw new Error("Nie udało się dodać markera");
-                    return response.json();
-                })
-                .then(data => {
-                    newMarker.setPopupContent(`<b>Szczyt</b><br>ID: ${data.id}<br><button onclick="removeMarkerById(${data.id}, ${markers.length})">Usuń</button>`);
-                    markers.push(newMarker);
-                })
-                .catch(error => {
-                    console.error('Błąd:', error);
-                    alert('Wystąpił błąd podczas dodawania markera.');
-                    map.removeLayer(newMarker);
-                });
+function updateRouteInfo(length, gain, loss) {
+    document.getElementById('route-length').textContent = `${length.toFixed(2)} km`;
+    document.getElementById('elevation-up').textContent = `${Math.round(gain)} m`;
+    document.getElementById('elevation-down').textContent = `${Math.round(loss)} m`;
+}
+
+function addPoint(lat, lng) {
+    hideElevationChart();
+    const newPoint = [lat, lng];
+
+    // Pierwszy punkt - tylko dodajemy
+    if (routePoints.length === 0) {
+        routePoints.push(newPoint);
+
+        const marker = L.circleMarker(newPoint, {
+            radius: 5,
+            color: 'red',
+            fillColor: 'red',
+            fillOpacity: 0.8
+        }).addTo(map);
+        routeMarkers.push(marker);
+        return;
+    }
+
+    const lastPoint = routePoints[routePoints.length - 1];
+
+    fetch('/api/route/segment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: lastPoint, to: newPoint })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("Nie udało się obliczyć segmentu trasy");
+        return response.json();
+    })
+    .then(data => {
+        routePoints.push(newPoint);
+
+        const marker = L.circleMarker(newPoint, {
+            radius: 5,
+            color: 'red',
+            fillColor: 'red',
+            fillOpacity: 0.8
+        }).addTo(map);
+        routeMarkers.push(marker);
+
+        routeSegments.push(data.routeGeoJson);
+
+        totalLength += data.distance;
+        totalElevationGain += data.elevation_gain;
+        totalElevationLoss += data.elevation_loss;
+
+        if (currentPolyline) map.removeLayer(currentPolyline);
+
+        currentPolyline = L.geoJSON({
+            type: "FeatureCollection",
+            features: routeSegments.map(seg => seg.features).flat()
+        }, {
+            style: {
+                color: '#333',
+                weight: 8,
+                dashArray: '8, 10'
             }
-        });
+        }).addTo(map);
 
+        updateRouteInfo(totalLength, totalElevationGain, totalElevationLoss);
+    })
+    .catch(error => {
+        console.error('Błąd:', error);
+        alert('Błąd podczas pobierania fragmentu trasy.');
+    });
+}
+
+map.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    if (drawingRoute) {
+        addPoint(lat, lng);
+    } else {
+        // Dodanie markera POZA trybem rysowania trasy
+        const newMarker = L.marker([lat, lng]).addTo(map);
+        newMarker.bindPopup("<b>Nowy marker</b><br><button disabled>Trwa dodawanie...</button>").openPopup();
+
+        fetch('/api/markers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                name: "Szczyt",
+                latitude: lat,
+                longitude: lng,
+                description: "Piękne miejsce"
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error("Nie udało się dodać markera");
+            return response.json();
+        })
+        .then(data => {
+            newMarker.setPopupContent(
+                `<b>Szczyt</b><br>ID: ${data.id}<br><button onclick="removeMarkerById(${data.id}, ${markers.length})">Usuń</button>`
+            );
+            markers.push(newMarker);
+        })
+        .catch(error => {
+            console.error('Błąd:', error);
+            alert('Wystąpił błąd podczas dodawania markera.');
+            map.removeLayer(newMarker);
+        });
+    }
+});
 
         function removeMarkerById(markerId, markerIndex) {
             if (!confirm("Czy na pewno chcesz usunąć ten marker?")) return;
@@ -379,14 +530,14 @@
 
 const avalancheControl = L.control({ position: 'topleft' });
 let avalancheOverlay = L.imageOverlay('/generate_png', [[49.306527778, 19.641805556], [49.14125, 20.30625]], {
-    opacity: 0.5,
+    opacity: 0.7,
     interactive: false
 });
 let overlayVisible = false;
 
 avalancheControl.onAdd = function (map) {
     const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-    div.innerHTML = '⛷️';
+    div.innerHTML = `<img src="/static/avalanche_icons/avalanche.png" alt="Lawina" style="width: 24px; height: 24px;">`;
     div.title = 'Nakładka lawinowa';
 
     div.onclick = function () {
@@ -407,6 +558,85 @@ avalancheControl.onAdd = function (map) {
 };
 
 avalancheControl.addTo(map);
+
+// === KONTROLKA SZLAKÓW ===
+const hikingControl = L.control({ position: 'topleft' });
+let hikingTrailsLayer = null;
+let hikingVisible = false;
+
+hikingControl.onAdd = function (map) {
+    const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+    div.innerHTML = `<img src="/static/avalanche_icons/hiking.png" alt="Szlaki" style="width: 24px; height: 24px;">`;
+    div.title = 'Szlaki turystyczne';
+
+    div.onclick = function () {
+        if (hikingVisible) {
+            map.removeLayer(hikingTrailsLayer);
+            div.classList.remove('active');
+            hikingVisible = false;
+        } else {
+            if (!hikingTrailsLayer) {
+                fetch('/api/szlaki')
+                    .then(res => res.json())
+                    .then(data => {
+                        hikingTrailsLayer = L.geoJSON(data, {
+                            style: function (feature) {
+                                return {
+                                    color: feature.properties.color || "#888",
+                                    weight: 2
+                                };
+                            },
+                            onEachFeature: function (feature, layer) {
+                                let popupText = feature.properties.name || "Szlak";
+                                layer.bindPopup(popupText);
+                            }
+                        });
+                        hikingTrailsLayer.addTo(map);
+                        div.classList.add('active');
+                        hikingVisible = true;
+                    })
+                    .catch(err => {
+                        alert("Nie udało się załadować szlaków.");
+                        console.error(err);
+                    });
+            } else {
+                hikingTrailsLayer.addTo(map);
+                div.classList.add('active');
+                hikingVisible = true;
+            }
+        }
+    };
+
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    return div;
+};
+
+hikingControl.addTo(map);
+
+
+function loadElevationChart() {
+    fetch('/api/route/elevation-profile', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ points: routePoints })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Błąd generowania wykresu");
+        return res.blob();
+    })
+    .then(blob => {
+        const imgUrl = URL.createObjectURL(blob);
+        document.getElementById('elevation-chart').src = imgUrl;
+        document.getElementById('elevation-chart-container').style.display = 'block';
+    })
+    .catch(err => {
+        console.error("Błąd przy generowaniu wykresu:", err);
+        alert("Nie udało się wygenerować profilu wysokości.");
+    });
+}
 
 
     </script>
