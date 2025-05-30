@@ -19,6 +19,7 @@
         <button onclick="searchPeak()" id="search-button">Szukaj</button>
         <button onclick="toggleDrawMode()" class="mapButton">Przełącz tryb tworzenia trasy</button>
         <button id="save-route-button" onclick="saveCurrentRoute()" class="mapButton" style="display: none;">Zapisz trasę</button>
+        <button id="add-avalanche-button" onclick="enableAvalancheMode()" class="mapButton">Dodaj lawinę</button>
     </div>
 
     <div class="route-controls" style="display: none;">
@@ -35,6 +36,7 @@
         <h3>Trasy</h3>
         <ul id="route-list"></ul>
     </div>
+    <img id="avalancheChartImage" style="max-width: 100%; margin-top: 1em;" />
 
     <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
             integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
@@ -52,6 +54,36 @@
         var routePoints = [];
         var currentPolyline = null;
         var drawingRoute = false;
+        let avalancheMode = false;
+
+        //marker lawinowy
+        const redIcon = L.icon({
+            iconUrl: 'https://maps.gstatic.com/mapfiles/ms2/micons/red-dot.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32]
+        });
+
+        function enableAvalancheMode() {
+            avalancheMode = true;
+            alert("Tryb dodawania lawiny włączony.\nKliknij na mapie, aby dodać znacznik lawinowy.");
+        }
+
+        function loadAvalancheMarkers() {
+            fetch('/api/avalanche_markers')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(marker => {
+                        const avalancheMarker = L.marker([marker.latitude, marker.longitude], { icon: redIcon }).addTo(map);
+                        avalancheMarker.bindPopup(
+                            `<b>Lawina</b><br>${marker.description}<br><i>Dodano: ${marker.created_at}</i>`
+                        );
+                    });
+                })
+                .catch(error => {
+                    console.error('Błąd podczas ładowania znaczników lawin:', error);
+                });
+        }
 
         const routeControlsDiv = document.querySelector('.route-controls');
 
@@ -134,8 +166,29 @@
             loadMarkers();
         }
 
+        function loadAvalancheChartImage(lat, lon) {
+            fetch('/plot_avalanche_chart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: lat, lon: lon, days: 30, radius: 2.0 })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Błąd pobierania wykresu');
+                return response.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                document.getElementById('avalancheChartImage').src = url;
+            })
+            .catch(err => console.error(err));
+        }
+
+
+
+
         // === WCZYTAJ MARKERY PRZY ŁADOWANIU STRONY ===
         function loadMarkers() {
+            // Usuń istniejące markery z mapy
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
 
@@ -148,23 +201,61 @@
                 dataArray.forEach((markerData) => {
                     const marker = L.marker([markerData.latitude, markerData.longitude]).addTo(map);
 
-                    marker.bindPopup(`
+                    // Przygotuj pusty popup DOM-owy
+                    const popupContent = document.createElement("div");
+                    popupContent.innerHTML = `
                         <b>${markerData.name}</b><br>ID: ${markerData.id}
-                        <br><button onclick="editMarkerName(${markerData.id})">Edytuj nazwę</button>
-                        <br><button onclick="removeMarkerById(${markerData.id}, ${markers.length})">Usuń</button>
-                    `);
+                        <br><button class="edit-btn">Edytuj nazwę</button>
+                        <br>Odległość od najbliższej lawiny: <span class="distance">ładowanie...</span>
+                        <br>Liczba lawin w pobliżu: <span class="count">ładowanie...</span>
+                        <br><button class="delete-btn">Usuń</button>
+                    `;
 
+                    // Obsługa przycisków
+                    popupContent.querySelector(".edit-btn").onclick = () => editMarkerName(markerData.id);
+                    popupContent.querySelector(".delete-btn").onclick = () => removeMarkerById(markerData.id, marker);
+
+                    marker.bindPopup(popupContent).openPopup();
+
+                    // Asynchroniczne pobieranie danych o lawinach
+                    Promise.all([
+                        fetch('/api/nearest_avalanche', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat: markerData.latitude, lon: markerData.longitude })
+                        }).then(res => res.json()),
+
+                        fetch('/api/avalanches_in_radius', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat: markerData.latitude, lon: markerData.longitude })
+                        }).then(res => res.json())
+                    ])
+                    .then(([distanceData, countData]) => {
+                        const distanceText = distanceData.distance !== null ? `${distanceData.distance} km` : "brak danych";
+                        const countText = countData.number_of_avalanches !== null ? `${countData.number_of_avalanches}` : "brak danych";
+
+                        popupContent.querySelector(".distance").textContent = distanceText;
+                        popupContent.querySelector(".count").textContent = countText;
+                    })
+                    .catch(error => {
+                        console.error("Błąd przy pobieraniu danych o lawinach:", error);
+                        popupContent.querySelector(".distance").textContent = "błąd";
+                        popupContent.querySelector(".count").textContent = "błąd";
+                    });
+
+                    // Zachowaj referencję do markera
                     markers.push(marker);
 
+                    // Lista po prawej
                     const li = document.createElement("li");
                     li.textContent = markerData.name;
 
-                    // Dodaj przycisk edycji w liście
                     const editBtn = document.createElement("button");
                     editBtn.textContent = "✏️";
                     editBtn.style.marginLeft = "10px";
                     editBtn.onclick = (e) => {
-                        e.stopPropagation(); // żeby nie odpalać kliknięcia w liście
+                        e.stopPropagation();
                         editMarkerName(markerData.id);
                     };
 
@@ -173,10 +264,16 @@
                         map.setView([markerData.latitude, markerData.longitude], 14);
                         marker.openPopup();
                     };
+
                     markerList.appendChild(li);
+
+                    marker.on('click', function () {
+                        loadAvalancheChartImage(markerData.latitude, markerData.longitude);
+                    });
                 });
             });
         }
+
 
         // === WCZYTAJ TRASY PRZY ŁADOWANIU STRONY ===
         function loadRoutes() {
@@ -334,7 +431,45 @@
                 const lng = e.latlng.lng;
                 routePoints.push([lat, lng]);
                 currentPolyline.setLatLngs(routePoints);
-            } else {
+            } else if (avalancheMode) {
+              const desc = prompt("Podaj krótki opis lawiny:");
+              if (desc === null) {
+                  alert("Anulowano dodawanie lawiny.");
+                  avalancheMode = false;
+                  return;
+              }
+
+              // Bez ikony, domyślna Leafletowa
+              const avalancheMarker = L.marker([e.latlng.lat, e.latlng.lng], { icon: redIcon }).addTo(map);
+              avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}`).openPopup();
+
+              const currentDate = new Date().toISOString();
+
+              fetch('/api/avalanche_markers', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                      latitude: e.latlng.lat,
+                      longitude: e.latlng.lng,
+                      description: desc
+                  })
+              })
+              .then(response => {
+                  if (!response.ok) throw new Error("Nie udało się dodać znacznika lawinowego.");
+                  return response.json();
+              })
+              .then(data => {
+                  avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}<br>Dodano: ${data.created_at}`);
+              })
+              .catch(err => {
+                  console.error("Błąd zapisu lawiny:", err);
+                  alert("Nie udało się zapisać znacznika lawinowego.");
+                  map.removeLayer(avalancheMarker);
+              });
+
+              avalancheMode = false;
+          } else {
                 // Dodanie markera
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
@@ -373,7 +508,7 @@
         });
 
 
-        function removeMarkerById(markerId, markerIndex) {
+        function removeMarkerById(markerId, markerObject) {
             if (!confirm("Czy na pewno chcesz usunąć ten marker?")) return;
 
             fetch(`/api/markers/${markerId}`, {
@@ -388,16 +523,17 @@
                 return response.json();
             })
             .then(() => {
-                //alert("Marker został usunięty.");
-                map.removeLayer(markers[markerIndex]);
-                markers.splice(markerIndex, 1);
+                // Usuń marker z mapy i z tablicy
+                map.removeLayer(markerObject);
+                markers = markers.filter(m => m !== markerObject);
             })
             .catch(err => {
                 console.error("Błąd usuwania markera:", err);
-                alert("Wystąpił błąd.");
+                alert("Wystąpił błąd podczas usuwania.");
             })
             .finally(() => loadMarkers());
         }
+
 
         // === USUŃ TRASĘ PO ID ===
         function removeRouteById(routeId) {
@@ -435,6 +571,7 @@
         document.addEventListener("DOMContentLoaded", () => {
             loadMarkers();
             loadRoutes();
+            loadAvalancheMarkers();
         });
 
         const avalancheControl = L.control({ position: 'topleft' });
@@ -520,11 +657,6 @@
                 alert("Nie udało się zaktualizować trasy.");
             });
         }
-
-
-
-
     </script>
 
 {% endblock %}
-

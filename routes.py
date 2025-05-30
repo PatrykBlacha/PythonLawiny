@@ -3,14 +3,18 @@ from flask_login import login_required, current_user, login_user, logout_user
 from __init__ import app, db, login_manager, bcrypt, PNG_PATH
 from flask import jsonify, render_template, request, send_file, flash, redirect, url_for
 import requests
+from datetime import timedelta
+import matplotlib.pyplot as plt
+import io
 
 from weather import current_weather, forecast_5days, get_forecast_plots, visibility_plot, get_historical_weather, \
     get_wind_plot, snow_depth_plot, weather_table, weather_icon
 from weather_locations import cameras, locations
 from avalanche_danger import avalanche_png, danger_table, get_avalanche_risk_topr
 from models import *
+from avalanche_statistics import distance_avalanche, count_avalanches_in_radius
 
-# załadowanie użytkownika z usermanagera
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -33,7 +37,7 @@ def add_marker():
         return jsonify({'message': 'Marker added successfully', 'id': new_marker.id}), 201
     except Exception as e:
         db.session.rollback()
-        print("Error adding marker:", str(e))  # zobaczysz ten błąd w konsoli serwera
+        print("Error adding marker:", str(e))
         return jsonify({'error': 'Server error: ' + str(e)}), 500
 
 
@@ -46,7 +50,7 @@ def add_route():
         user_id=current_user.id,
         name=data['name'],
         description=data.get('description', ''),
-        waypoints=data['waypoints']  # to jest string JSONowy
+        waypoints=data['waypoints']
     )
     db.session.add(new_route)
     db.session.commit()
@@ -65,11 +69,10 @@ def delete_route(route_id):
     return jsonify({'message': 'Trasa usunięta'})
 
 
-# tu sa nudne zapytania do bazy
 @app.route('/api/markers', methods=['GET'])
 @login_required
 def get_markers():
-    markers = Marker.query.all()
+    markers = Marker.query.filter_by(user_id=current_user.id).all()
     return jsonify([{
         'id': m.id,
         'name': m.name,
@@ -82,7 +85,7 @@ def get_markers():
 @app.route('/api/routes', methods=['GET'])
 @login_required
 def get_routes():
-    routes = Route.query.all()
+    routes = Route.query.fliter_by(user_id=current_user.id).all()
     return jsonify([{
         'id': r.id,
         'name': r.name,
@@ -340,7 +343,114 @@ def update_route(route_id):
     db.session.commit()
     return jsonify({"success": True})
 
+@app.route('/api/avalanche_markers', methods=['POST'])
+@login_required
+def add_avalanche_marker():
+    data = request.get_json()
+    new_marker = AvalancheMarker(
+        user_id=current_user.id,
+        latitude=data['latitude'],
+        longitude=data['longitude'],
+        description=data.get('description', ''),
+        created_at=datetime.now()
+    )
+    db.session.add(new_marker)
+    db.session.commit()
+    return jsonify({'message': 'Avalanche marker added successfully'}), 201
 
 
+@app.route('/api/avalanche_markers', methods=['GET'])
+def get_avalanche_markers():
+    markers = AvalancheMarker.query.order_by(AvalancheMarker.created_at.desc()).all()
+    return jsonify([{
+        'id': m.id,
+        'latitude': m.latitude,
+        'longitude': m.longitude,
+        'description': m.description,
+        'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+        'username': m.user.username
+    } for m in markers])
+
+
+@app.route("/api/nearest_avalanche", methods=["POST"])
+def nearest_avalanche():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    avalanches = AvalancheMarker.query.all()
+
+    if not avalanches:
+        return jsonify({"distance": None})  #Brak lawin
+
+    min_distance = min(
+        distance_avalanche(lat, lon, avalanche.latitude, avalanche.longitude)
+        for avalanche in avalanches
+    )
+
+    return jsonify({"distance": round(min_distance, 2)})
+
+@app.route("/api/avalanches_in_radius", methods=["POST"])
+def avalanches_in_radius():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    avalanches = AvalancheMarker.query.all()
+    number_of_avalanches = count_avalanches_in_radius(lat, lon, avalanches)
+
+    return jsonify({"number_of_avalanches": number_of_avalanches})
+
+
+@app.route('/plot_avalanche_chart', methods=['POST'])
+def plot_avalanche_chart():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+    radius_km = data.get("radius", 2.0)
+    days = data.get("days", 30)
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    now = datetime.now()
+    start_date = now - timedelta(days=days)
+
+    avalanches = AvalancheMarker.query.filter(AvalancheMarker.created_at >= start_date).all()
+
+    #Dane dzienne
+    date_counts = { (start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(days + 1) }
+
+    for avalanche in avalanches:
+        distance = distance_avalanche(lat, lon, avalanche.latitude, avalanche.longitude)
+        if distance <= radius_km:
+            day = avalanche.created_at.strftime('%Y-%m-%d')
+            if day in date_counts:
+                date_counts[day] += 1
+
+    labels = list(date_counts.keys())
+    values = list(date_counts.values())
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(labels, values, marker='o', color='red')
+    ax.fill_between(labels, values, alpha=0.3, color='red')
+    ax.set_title("Liczba lawin w okolicy ({} km)".format(radius_km))
+    ax.set_xlabel("Data")
+    ax.set_ylabel("Liczba lawin")
+    ax.tick_params(axis='x', rotation=45)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close(fig)
+
+    return send_file(buf, mimetype='image/png')
 
 
