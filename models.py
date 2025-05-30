@@ -1,3 +1,5 @@
+from sqlalchemy import JSON
+
 from __init__ import db, UserMixin
 from datetime import datetime
 
@@ -23,7 +25,7 @@ class Route(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    waypoints = db.Column(db.Text, nullable=False)  # JSON string
+    waypoints = db.Column(JSON, nullable=False)  # JSON string
 
 class AvalancheMarker(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -89,7 +89,7 @@ def get_markers():
 @app.route('/api/routes', methods=['GET'])
 @login_required
 def get_routes():
-    routes = Route.query.fliter_by(user_id=current_user.id).all()
+    routes = Route.query.filter_by(user_id=current_user.id).all()
     return jsonify([{
         'id': r.id,
         'name': r.name,
