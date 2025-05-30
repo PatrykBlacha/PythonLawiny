@@ -1,20 +1,24 @@
-from flask_login import login_required, current_user, login_user, logout_user
-
-from __init__ import app, db, login_manager, bcrypt, PNG_PATH
-from flask import jsonify, render_template, request, send_file, flash, redirect, url_for
-import requests
+from __init__ import app, login_manager, bcrypt, PNG_PATH
 from datetime import timedelta
-import matplotlib.pyplot as plt
-import io
-
-from weather import current_weather, forecast_5days, get_forecast_plots, visibility_plot, get_historical_weather, \
-    get_wind_plot, snow_depth_plot, weather_table, weather_icon
-from weather_locations import cameras, locations
-from avalanche_danger import avalanche_png, danger_table, get_avalanche_risk_topr
 from models import *
 from avalanche_statistics import distance_avalanche, count_avalanches_in_radius
+import io
+import requests
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app, send_file, \
+    send_from_directory
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from routes import get_routes_to_json
+import geopandas as gpd
+from routes import plan_route, get_elevation
+from geopy.distance import geodesic
 
+from weather import *
+from weather_locations import *
+from avalanche_danger import danger_table, get_avalanche_risk_topr, avalanche_png
 
+PNG_PATH = 'static/risk_map.png'
+if not os.path.exists("static/hiking_trails.geojson"):
+    get_routes_to_json()
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -137,6 +141,10 @@ def generate_png():
     avalanche_png()
     return send_file(PNG_PATH, mimetype='image/png')
 
+@app.route("/api/szlaki")
+def get_trails():
+    szlaki = gpd.read_file("static/hiking_trails.geojson")
+    return jsonify(szlaki.__geo_interface__)
 
 @app.route("/search_peak", methods=["GET"])
 def search_peak():
@@ -167,6 +175,119 @@ def search_peak():
 
     return jsonify(result)
 
+@app.route("/api/route/segment", methods=["POST"])
+def plan_segment():
+    data = request.get_json()
+    start = data.get("from")
+    end = data.get("to")
+
+    if not start or not end:
+        return jsonify({"error": "Brakuje punktów start lub end"}), 400
+
+    route_points, distance, elevation_gain, elevation_loss = plan_route(start, end)
+
+    geojson_coords = [(lon, lat) for lat, lon in route_points]
+    geojson_feature = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": geojson_coords
+                },
+                "properties": {}
+            }
+        ]
+    }
+
+    return jsonify({
+        "route_points": route_points,
+        "distance": distance,
+        "elevation_gain": elevation_gain,
+        "elevation_loss": elevation_loss,
+        "routeGeoJson": geojson_feature
+    })
+
+@app.route("/api/route/trim", methods=["POST"])
+def trim_last_segment():
+    data = request.get_json()
+    points = data.get("points", [])
+
+    points = points[:-1]
+    full_features = []
+    total_distance = 0
+    total_gain = 0
+    total_loss = 0
+
+    for i in range(len(points) - 1):
+        seg_points, dist, gain, loss = plan_route(points[i], points[i+1])
+        total_distance += dist
+        total_gain += gain
+        total_loss += loss
+
+        coords = [(lon, lat) for lat, lon in seg_points]
+        full_features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords
+            },
+            "properties": {}
+        })
+
+    return jsonify({
+        "routeGeoJson": {
+            "type": "FeatureCollection",
+            "features": full_features
+        },
+        "points": points,
+        "length": total_distance,
+        "elevationGain": total_gain,
+        "elevationLoss": total_loss
+    })
+
+@app.route('/api/route/elevation-profile', methods=['POST'])
+def elevation_profile():
+    data = request.get_json()
+    points = data.get('points', [])
+
+    if len(points) < 2:
+        return {"error": "Zbyt mało punktów"}, 400
+
+    elevations = []
+    distances = [0]
+
+    total_distance = 0
+    prev_lat, prev_lng = points[0]
+
+    ele = get_elevation(prev_lat, prev_lng)
+    elevations.append(ele)
+    for i in range(len(points) - 1):
+        seg_points, dist, gain, loss = plan_route(points[i], points[i + 1])
+        prev_lat, prev_lng = seg_points[0]
+        for lat, lng in seg_points[1:]:
+            ele = get_elevation(lat, lng)
+            elevations.append(ele)
+            segment_dist = geodesic((lat, lng), (prev_lat, prev_lng)).kilometers
+            total_distance += segment_dist
+            distances.append(total_distance)
+            prev_lat, prev_lng = lat, lng
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(distances, elevations, color='darkgreen', linewidth=2)
+    ax.set_title("Profil wysokości trasy")
+    ax.set_xlabel("Dystans (km)")
+    ax.set_ylabel("Wysokość (m)")
+    ax.grid(True)
+
+    img_io = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+    plt.close(fig)
+
+    return send_file(img_io, mimetype='image/png')
 
 @app.route("/pogoda/<location>")
 def weather(location):
