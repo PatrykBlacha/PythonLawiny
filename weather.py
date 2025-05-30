@@ -6,7 +6,7 @@ from retry_requests import retry
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')   # żeby generować wykresy i nie wyswietlac ich na ekranie, tylko zapisywać i przekazywac pozniej na stronę
 import matplotlib.dates as mdates
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from scipy.ndimage import rotate
@@ -32,9 +32,16 @@ def current_weather(latitude,longitude):
         "longitude": longitude,
         "current": ["temperature_2m", "cloud_cover", "wind_speed_10m","snow_depth"]
     }
-    responses = openmeteo.weather_api(url, params=params)
-    response = responses[0]
+    # responses = openmeteo.weather_api(url, params=params)
+    # response = responses[0]
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+    except EOFError as e:
+        print(f"Błąd przy odczycie cache: {e}")
+        # openmeteo.session.cache.delete_url(url)
+        responses = openmeteo.weather_api(url, params=params)
     # Current values. The order of variables needs to be the same as requested.
+    response = responses[0]
     current = response.Current()
     current_temperature_2m = current.Variables(0).Value()
     current_cloud_cover = current.Variables(1).Value()
@@ -50,8 +57,17 @@ def forecast_5days(latitude,longitude):
         "hourly": ["temperature_2m", "snowfall", "snow_depth", "precipitation_probability", "rain", "cloud_cover", "visibility", "wind_speed_10m", "wind_direction_10m"],
         "forecast_days": 5
     }
-    responses = openmeteo.weather_api(url, params=params)
+    # responses = openmeteo.weather_api(url, params=params)
+    #
+    # response = responses[0]
 
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+    except EOFError as e:
+        print(f"Błąd przy odczycie cache: {e}")
+        # openmeteo.session.cache.delete_url(url)
+        responses = openmeteo.weather_api(url, params=params)
+    # Current values. The order of variables needs to be the same as requested.
     response = responses[0]
 
     hourly = response.Hourly()
@@ -282,9 +298,17 @@ def weather_table(latitude,longitude):
         "temporal_resolution": "hourly_3",
         "forecast_days": 5
     }
-    responses = openmeteo.weather_api(url, params=params)
-
-    # Process first location. Add a for-loop for multiple locations or weather models
+    # responses = openmeteo.weather_api(url, params=params)
+    #
+    # # Process first location. Add a for-loop for multiple locations or weather models
+    # response = responses[0]
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+    except EOFError as e:
+        print(f"Błąd przy odczycie cache: {e}")
+        # openmeteo.session.cache.delete_url(url)
+        responses = openmeteo.weather_api(url, params=params)
+    # Current values. The order of variables needs to be the same as requested.
     response = responses[0]
 
     # Process hourly data. The order of variables needs to be the same as requested.
@@ -323,8 +347,14 @@ def get_historical_weather(latitude,longitude):
                    "direct_normal_irradiance", "shortwave_radiation"],
         "temporal_resolution": "hourly_6"
     }
-    responses = openmeteo.weather_api(url, params=params)
 
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+    except EOFError as e:
+        print(f"Błąd przy odczycie cache: {e}")
+        # openmeteo.session.cache.delete_url(url)
+        responses = openmeteo.weather_api(url, params=params)
+    # Current values. The order of variables needs to be the same as requested.
     response = responses[0]
 
     hourly = response.Hourly()
