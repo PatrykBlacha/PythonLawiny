@@ -18,7 +18,8 @@
         <input type="text" id="search-box" placeholder="Wyszukaj szczyt...">
         <button onclick="searchPeak()" id="search-button">Szukaj</button>
         <button onclick="toggleDrawMode()" class="mapButton">Przełącz tryb tworzenia trasy</button>
-        <button onclick="saveCurrentRoute()" class="mapButton">Zapisz trasę</button>
+        <button id="save-route-button" onclick="saveCurrentRoute()" class="mapButton" style="display: none;">Zapisz trasę</button>
+        <button id="add-avalanche-button" onclick="enableAvalancheMode()" class="mapButton">Dodaj lawinę</button>
     </div>
 
     <div class="route-controls" style="display: none;">
@@ -28,19 +29,27 @@
 
     <div id="map"></div>
 
-    <div id="route-info" class="route-info">
+<div id="route-info" class="route-info">
     <h3>Statystyki trasy</h3>
     <ul>
         <li><strong>Długość:</strong> <span id="route-length">0 km</span></li>
         <li><strong>Przewyższenia w górę:</strong> <span id="elevation-up">0 m</span></li>
         <li><strong>Przewyższenia w dół:</strong> <span id="elevation-down">0 m</span></li>
     </ul>
-        <button onclick="loadElevationChart()" class="btn-profile">Pokaż profil wysokości</button>
+    <button onclick="loadElevationChart()" class="btn-profile">Pokaż profil wysokości</button>
     <div id="elevation-chart-container" style="display:none; margin-top:15px;">
         <img id="elevation-chart" alt="Profil wysokości trasy" style="width:100%; border-radius: 8px;" />
     </div>
 </div>
 
+<div class="sidebar">
+    <h3>Markery</h3>
+    <ul id="marker-list"></ul>
+
+    <h3>Trasy</h3>
+    <ul id="route-list"></ul>
+</div>
+<img id="avalancheChartImage" style="max-width: 100%; margin-top: 1em;" />
 
     <script src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
             integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
@@ -59,6 +68,36 @@
         var routeSegments=[];
         var currentPolyline = null;
         var drawingRoute = false;
+        let avalancheMode = false;
+
+        //marker lawinowy
+        const redIcon = L.icon({
+            iconUrl: 'https://maps.gstatic.com/mapfiles/ms2/micons/red-dot.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32]
+        });
+
+        function enableAvalancheMode() {
+            avalancheMode = true;
+            alert("Tryb dodawania lawiny włączony.\nKliknij na mapie, aby dodać znacznik lawinowy.");
+        }
+
+        function loadAvalancheMarkers() {
+            fetch('/api/avalanche_markers')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(marker => {
+                        const avalancheMarker = L.marker([marker.latitude, marker.longitude], { icon: redIcon }).addTo(map);
+                        avalancheMarker.bindPopup(
+                            `<b>Lawina</b><br>${marker.description}<br><i>Dodano: ${marker.created_at}</i>`
+                        );
+                    });
+                })
+                .catch(error => {
+                    console.error('Błąd podczas ładowania znaczników lawin:', error);
+                });
+        }
 
         let totalLength = 0;
         let totalElevationGain = 0;
@@ -144,47 +183,150 @@
                     console.error("Wyszukiwanie szczytu nieudane:", error);
                     alert("Nie można znaleźć szczytu.");
                 });
+            loadMarkers();
         }
+
+        function loadAvalancheChartImage(lat, lon) {
+            fetch('/plot_avalanche_chart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: lat, lon: lon, days: 30, radius: 2.0 })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Błąd pobierania wykresu');
+                return response.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                document.getElementById('avalancheChartImage').src = url;
+            })
+            .catch(err => console.error(err));
+        }
+
+
+
 
         // === WCZYTAJ MARKERY PRZY ŁADOWANIU STRONY ===
         function loadMarkers() {
-            fetch('/api/markers', {
-                method: 'GET',
-                credentials: 'include'
-            })
-            .then(response => {
-                if (!response.ok) throw new Error("Błąd wczytywania markerów");
-                return response.json();
-            })
-                //rysowanie tych markerow
+            // Usuń istniejące markery z mapy
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+
+            fetch('/api/markers', { method: 'GET', credentials: 'include' })
+            .then(response => response.json())
             .then(dataArray => {
-                dataArray.forEach(markerData => {
+                const markerList = document.getElementById("marker-list");
+                markerList.innerHTML = "";  // wyczyść listę
+
+                dataArray.forEach((markerData) => {
                     const marker = L.marker([markerData.latitude, markerData.longitude]).addTo(map);
-                    marker.bindPopup(`<b>${markerData.name}</b><br>ID: ${markerData.id}<br><button onclick="removeMarkerById(${markerData.id}, ${markers.length})">Usuń</button>`);
+
+                    // Przygotuj pusty popup DOM-owy
+                    const popupContent = document.createElement("div");
+                    popupContent.innerHTML = `
+                        <b>${markerData.name}</b><br>ID: ${markerData.id}
+                        <br><button class="edit-btn">Edytuj nazwę</button>
+                        <br>Odległość od najbliższej lawiny: <span class="distance">ładowanie...</span>
+                        <br>Liczba lawin w pobliżu: <span class="count">ładowanie...</span>
+                        <br><button class="delete-btn">Usuń</button>
+                    `;
+
+                    // Obsługa przycisków
+                    popupContent.querySelector(".edit-btn").onclick = () => editMarkerName(markerData.id);
+                    popupContent.querySelector(".delete-btn").onclick = () => removeMarkerById(markerData.id, marker);
+
+                    marker.bindPopup(popupContent).openPopup();
+
+                    // Asynchroniczne pobieranie danych o lawinach
+                    Promise.all([
+                        fetch('/api/nearest_avalanche', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat: markerData.latitude, lon: markerData.longitude })
+                        }).then(res => res.json()),
+
+                        fetch('/api/avalanches_in_radius', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat: markerData.latitude, lon: markerData.longitude })
+                        }).then(res => res.json())
+                    ])
+                    .then(([distanceData, countData]) => {
+                        const distanceText = distanceData.distance !== null ? `${distanceData.distance} km` : "brak danych";
+                        const countText = countData.number_of_avalanches !== null ? `${countData.number_of_avalanches}` : "brak danych";
+
+                        popupContent.querySelector(".distance").textContent = distanceText;
+                        popupContent.querySelector(".count").textContent = countText;
+                    })
+                    .catch(error => {
+                        console.error("Błąd przy pobieraniu danych o lawinach:", error);
+                        popupContent.querySelector(".distance").textContent = "błąd";
+                        popupContent.querySelector(".count").textContent = "błąd";
+                    });
+
+                    // Zachowaj referencję do markera
                     markers.push(marker);
+
+                    // Lista po prawej
+                    const li = document.createElement("li");
+                    li.textContent = markerData.name;
+
+                    const editBtn = document.createElement("button");
+                    editBtn.textContent = "✏️";
+                    editBtn.style.marginLeft = "10px";
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        editMarkerName(markerData.id);
+                    };
+
+                    li.appendChild(editBtn);
+                    li.onclick = () => {
+                        map.setView([markerData.latitude, markerData.longitude], 14);
+                        marker.openPopup();
+                    };
+
+                    markerList.appendChild(li);
+
+                    marker.on('click', function () {
+                        loadAvalancheChartImage(markerData.latitude, markerData.longitude);
+                    });
                 });
-            })
-            .catch(error => {
-                console.error("Nie można pobrać markerów:", error);
             });
         }
 
+
         // === WCZYTAJ TRASY PRZY ŁADOWANIU STRONY ===
         function loadRoutes() {
-            fetch('/api/routes', {
-                method: 'GET',
-                credentials: 'include'
-            })
+            fetch('/api/routes', { method: 'GET', credentials: 'include' })
             .then(response => response.json())
             .then(routes => {
+                const routeList = document.getElementById("route-list");
+                routeList.innerHTML = "";
+
                 routes.forEach(route => {
                     const parsedWaypoints = JSON.parse(route.waypoints).map(point => L.latLng(point[0], point[1]));
                     const line = L.polyline(parsedWaypoints, { color: 'blue' }).addTo(map);
                     line.bindPopup(`<b>${route.name}</b><br>ID: ${route.id}<br><button onclick="removeRouteById(${route.id})">Usuń trasę</button>`).openPopup();
+
+                    const li = document.createElement("li");
+                    li.textContent = route.name;
+
+                    // Dodaj przycisk edycji ✏️
+                    const editBtn = document.createElement("button");
+                    editBtn.textContent = "✏️";
+                    editBtn.style.marginLeft = "10px";
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation(); // nie uruchamiaj kliknięcia w <li>
+                        editRouteName(route.id);
+                    };
+                    li.appendChild(editBtn);
+
+                    li.onclick = () => {
+                        map.fitBounds(line.getBounds());
+                        line.openPopup();
+                    };
+                    routeList.appendChild(li);
                 });
-            })
-            .catch(err => {
-                console.error("Nie można załadować tras:", err);
             });
         }
 
@@ -204,8 +346,11 @@
 
 
 
+            const saveRouteButton = document.getElementById('save-route-button');
+
             if (drawingRoute) {
                 routeControlsDiv.style.display = 'inline-block';
+                saveRouteButton.style.display = 'inline-block';  // 👈 pokaż przycisk
                 alert("Tryb rysowania trasy aktywny.\nKliknij na mapie, aby dodać punkty.");
                 totalLength = 0;
                 totalElevationGain = 0;
@@ -217,6 +362,7 @@
                 currentPolyline = L.polyline([], { color: 'red' }).addTo(map);
             } else {
                 routeControlsDiv.style.display = 'none';
+                saveRouteButton.style.display = 'none';  // 👈 ukryj przycisk
                 if (confirm("Czy chcesz zapisać tę trasę?")) {
                     saveCurrentRoute();
                 } else {
@@ -228,6 +374,7 @@
                 }
             }
         }
+
 
         // === USUŃ OSTATNI PUNKT ===
         function removeLastPoint() {
@@ -337,11 +484,16 @@ function removeLastSegment() {
             })
             .then(() => {
                 alert("Trasa została zapisana!");
-                map.removeLayer(currentPolyline);
-                drawingRoute=false
+                map.removeLayer(currentPolyline); // usuń starą trasę (czerwoną)
                 currentPolyline = null;
                 routePoints = [];
-                loadRoutes();  // Załaduj ponownie trasy z bazy
+
+                // Ukryj interfejs rysowania
+                document.getElementById('save-route-button').style.display = 'none';
+                routeControlsDiv.style.display = 'none';
+                drawingRoute = false;
+
+                loadRoutes();  // odśwież trasy bez przeładowania strony
             })
             .catch(err => {
                 console.error("Błąd zapisu trasy:", err);
@@ -351,7 +503,6 @@ function removeLastSegment() {
 
 
         // === RYSOWANIE TRASY / DODAWANIE MARKERÓW === technicznie rzecz biorą po prostu obsługa kliknięcia //
-
 
 function updateRouteInfo(length, gain, loss) {
     document.getElementById('route-length').textContent = `${length.toFixed(2)} km`;
@@ -415,7 +566,7 @@ function addPoint(lat, lng) {
                 color: '#333',
                 weight: 8,
                 dashArray: '8, 10'
-            }
+              }
         }).addTo(map);
 
         updateRouteInfo(totalLength, totalElevationGain, totalElevationLoss);
@@ -425,21 +576,58 @@ function addPoint(lat, lng) {
         alert('Błąd podczas pobierania fragmentu trasy.');
     });
 }
-
+              
 map.on('click', function(e) {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
 
     if (drawingRoute) {
-        addPoint(lat, lng);
+        addPoint(lat, lng);  // z gałęzi pogoda
+    } else if (avalancheMode) {
+        const desc = prompt("Podaj krótki opis lawiny:");
+        if (desc === null) {
+            alert("Anulowano dodawanie lawiny.");
+            avalancheMode = false;
+            return;
+        }
+
+        const avalancheMarker = L.marker([lat, lng], { icon: redIcon }).addTo(map);
+        avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}`).openPopup();
+
+        fetch('/api/avalanche_markers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                latitude: lat,
+                longitude: lng,
+                description: desc
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error("Nie udało się dodać znacznika lawinowego.");
+            return response.json();
+        })
+        .then(data => {
+            avalancheMarker.bindPopup(`<b>Lawina</b><br>${desc}<br>Dodano: ${data.created_at}`);
+        })
+        .catch(err => {
+            console.error("Błąd zapisu lawiny:", err);
+            alert("Nie udało się zapisać znacznika lawinowego.");
+            map.removeLayer(avalancheMarker);
+        });
+
+        avalancheMode = false;
     } else {
-        // Dodanie markera POZA trybem rysowania trasy
+        // Dodanie markera
         const newMarker = L.marker([lat, lng]).addTo(map);
         newMarker.bindPopup("<b>Nowy marker</b><br><button disabled>Trwa dodawanie...</button>").openPopup();
 
         fetch('/api/markers', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             credentials: 'include',
             body: JSON.stringify({
                 name: "Szczyt",
@@ -453,9 +641,7 @@ map.on('click', function(e) {
             return response.json();
         })
         .then(data => {
-            newMarker.setPopupContent(
-                `<b>Szczyt</b><br>ID: ${data.id}<br><button onclick="removeMarkerById(${data.id}, ${markers.length})">Usuń</button>`
-            );
+            newMarker.setPopupContent(`<b>Szczyt</b><br>ID: ${data.id}<br><button onclick="removeMarkerById(${data.id}, ${markers.length})">Usuń</button>`);
             markers.push(newMarker);
         })
         .catch(error => {
@@ -466,7 +652,8 @@ map.on('click', function(e) {
     }
 });
 
-        function removeMarkerById(markerId, markerIndex) {
+
+        function removeMarkerById(markerId, markerObject) {
             if (!confirm("Czy na pewno chcesz usunąć ten marker?")) return;
 
             fetch(`/api/markers/${markerId}`, {
@@ -481,15 +668,17 @@ map.on('click', function(e) {
                 return response.json();
             })
             .then(() => {
-                alert("Marker został usunięty.");
-                map.removeLayer(markers[markerIndex]);
-                markers.splice(markerIndex, 1);
+                // Usuń marker z mapy i z tablicy
+                map.removeLayer(markerObject);
+                markers = markers.filter(m => m !== markerObject);
             })
             .catch(err => {
                 console.error("Błąd usuwania markera:", err);
-                alert("Wystąpił błąd.");
-            });
+                alert("Wystąpił błąd podczas usuwania.");
+            })
+            .finally(() => loadMarkers());
         }
+
 
         // === USUŃ TRASĘ PO ID ===
         function removeRouteById(routeId) {
@@ -519,18 +708,20 @@ map.on('click', function(e) {
             .catch(err => {
                 console.error("Błąd usuwania trasy:", err);
                 alert("Wystąpił błąd.");
-            });
+            })
+            .finally(() => loadRoutes());
         }
 
         //=== STARTOWE WCZYTYWANIE === podobno potrzebne w js
         document.addEventListener("DOMContentLoaded", () => {
             loadMarkers();
             loadRoutes();
+            loadAvalancheMarkers();
         });
 
 const avalancheControl = L.control({ position: 'topleft' });
 let avalancheOverlay = L.imageOverlay('/generate_png', [[49.306527778, 19.641805556], [49.14125, 20.30625]], {
-    opacity: 0.7,
+    opacity: 0.7,  // z 'pogoda' dla lepszej widoczności
     interactive: false
 });
 let overlayVisible = false;
@@ -552,12 +743,43 @@ avalancheControl.onAdd = function (map) {
         }
     };
 
+    // z 'main' – zabezpieczenie przed przypadkowymi interakcjami z mapą
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
+
     return div;
 };
 
-avalancheControl.addTo(map);
+
+        avalancheControl.addTo(map);
+
+        function editMarkerName(markerId) {
+            const newName = prompt("Podaj nową nazwę markera:");
+            if (!newName) return;
+
+            fetch(`/api/markers/${markerId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ name: newName })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Nie udało się zaktualizować markera");
+                return response.json();
+            })
+            .then(() => {
+                alert("Nazwa została zaktualizowana.");
+                loadMarkers(); // odśwież listę i popupy
+            })
+            .catch(err => {
+                console.error("Błąd aktualizacji markera:", err);
+                alert("Nie udało się zaktualizować markera.");
+            });
+            loadMarkers();
+        }
+
 
 // === KONTROLKA SZLAKÓW ===
 const hikingControl = L.control({ position: 'topleft' });
@@ -615,6 +837,7 @@ hikingControl.onAdd = function (map) {
 hikingControl.addTo(map);
 
 
+// === PROFIL WYSOKOŚCI TRASY ===
 function loadElevationChart() {
     fetch('/api/route/elevation-profile', {
         method: 'POST',
@@ -639,7 +862,33 @@ function loadElevationChart() {
 }
 
 
+// === EDYCJA NAZWY TRASY ===
+function editRouteName(routeId) {
+    const newName = prompt("Podaj nową nazwę trasy:");
+    if (!newName) return;
+
+    fetch(`/api/routes/${routeId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name: newName })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("Nie udało się zaktualizować nazwy trasy");
+        return response.json();
+    })
+    .then(() => {
+        alert("Nazwa trasy została zaktualizowana.");
+        loadRoutes(); // Odśwież widok tras
+    })
+    .catch(err => {
+        console.error("Błąd aktualizacji trasy:", err);
+        alert("Nie udało się zaktualizować trasy.");
+    });
+}
+
     </script>
 
 {% endblock %}
-

@@ -489,6 +489,7 @@ button{
     background-color: #d0d0d0;
 }
 
+
 .route-info {
     background: #fff;
     border-radius: 12px;
@@ -536,4 +537,30 @@ button{
 }
 .btn-profile:hover {
     background-color: #1a252f;
+
+#sidebar {
+    position: absolute;
+    top: 60px;
+    right: 10px;
+    width: 250px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px;
+    z-index: 1000;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    font-family: sans-serif;
+}
+#sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+#sidebar li {
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+#sidebar li:hover {
+    background-color: #e0e0e0;
+
 }

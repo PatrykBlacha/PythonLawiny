@@ -1,73 +1,23 @@
-import io
+from flask_login import login_required, current_user, login_user, logout_user
+
+from __init__ import app, db, login_manager, bcrypt, PNG_PATH
+from flask import jsonify, render_template, request, send_file, flash, redirect, url_for
 import requests
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app, send_file, \
-    send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask_bcrypt import Bcrypt
-from flask_cors import CORS
-from routes import get_routes_to_json
-import geopandas as gpd
-from routes import plan_route, get_elevation
-from geopy.distance import geodesic
+from datetime import timedelta
+import matplotlib.pyplot as plt
+import io
 
-from weather import *
-from weather_locations import *
-from avalanche_danger import danger_table, get_avalanche_risk_topr, avalanche_png
-
-PNG_PATH = 'static/risk_map.png'
-
-# Inicjalizacja aplikacji
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SECRET_KEY'] = 'tajny klucz'
+from weather import current_weather, forecast_5days, get_forecast_plots, visibility_plot, get_historical_weather, \
+    get_wind_plot, snow_depth_plot, weather_table, weather_icon
+from weather_locations import cameras, locations
+from avalanche_danger import avalanche_png, danger_table, get_avalanche_risk_topr
+from models import *
+from avalanche_statistics import distance_avalanche, count_avalanches_in_radius
 
 
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
-login_manager = LoginManager(app)
-login_manager.login_view = "login"
-CORS(app)
-
-if not os.path.exists("static/hiking_trails.geojson"):
-    get_routes_to_json()
-
-
-# ogólniue kod do fragmentaryzacji ale to nigdy nie działało jak probowalem
-# to mogloby byc w models.py
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(256), nullable=False)
-    markers = db.relationship('Marker', backref='user', lazy=True)
-    routes = db.relationship('Route', backref='user', lazy=True)
-
-
-class Marker(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
-    description = db.Column(db.Text, nullable=True)
-
-
-class Route(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    waypoints = db.Column(db.Text, nullable=False)  # JSON string
-
-
-# załadowanie użytkownika z usermanagera
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-
-# ROUTY
-# znowu fragmentaryzacja tu powinna wejsc
 
 @app.route('/api/markers', methods=['POST'])
 @login_required
@@ -87,7 +37,7 @@ def add_marker():
         return jsonify({'message': 'Marker added successfully', 'id': new_marker.id}), 201
     except Exception as e:
         db.session.rollback()
-        print("Error adding marker:", str(e))  # zobaczysz ten błąd w konsoli serwera
+        print("Error adding marker:", str(e))
         return jsonify({'error': 'Server error: ' + str(e)}), 500
 
 
@@ -100,7 +50,7 @@ def add_route():
         user_id=current_user.id,
         name=data['name'],
         description=data.get('description', ''),
-        waypoints=data['waypoints']  # to jest string JSONowy
+        waypoints=data['waypoints']
     )
     db.session.add(new_route)
     db.session.commit()
@@ -119,32 +69,29 @@ def delete_route(route_id):
     return jsonify({'message': 'Trasa usunięta'})
 
 
-# tu sa nudne zapytania do bazy
 @app.route('/api/markers', methods=['GET'])
-# @login_required
+@login_required
 def get_markers():
-    # markers = Marker.query.filter_by(user_id=current_user.id).all()
-    markers = Marker.query.all()
+    markers = Marker.query.filter_by(user_id=current_user.id).all()
     return jsonify([{
-        'id': marker.id,
-        'name': marker.name,
-        'latitude': marker.latitude,
-        'longitude': marker.longitude,
-        'description': marker.description
-    } for marker in markers])
+        'id': m.id,
+        'name': m.name,
+        'latitude': m.latitude,
+        'longitude': m.longitude,
+        'description': m.description
+    } for m in markers])
 
 
 @app.route('/api/routes', methods=['GET'])
 @login_required
 def get_routes():
-    routes = Route.query.filter_by(user_id=current_user.id).all()
-    # routes = Route.query.all()
+    routes = Route.query.fliter_by(user_id=current_user.id).all()
     return jsonify([{
-        'id': route.id,
-        'name': route.name,
-        'description': route.description,
-        'waypoints': route.waypoints
-    } for route in routes])
+        'id': r.id,
+        'name': r.name,
+        'waypoints': r.waypoints,
+        'description': r.description
+    } for r in routes])
 
 
 @app.route('/api/markers/<int:marker_id>', methods=['DELETE'])
@@ -174,6 +121,7 @@ def home():
                            snow_depth=100 * round(sd, 4),
                            locations=locations)
 
+
 @app.context_processor
 def inject_locations():
     return {'locations': locations}
@@ -183,15 +131,12 @@ def inject_locations():
 def mapa():
     return render_template("map.html")
 
+
 @app.route('/generate_png')
 def generate_png():
     avalanche_png()
     return send_file(PNG_PATH, mimetype='image/png')
 
-@app.route("/api/szlaki")
-def get_trails():
-    szlaki = gpd.read_file("static/hiking_trails.geojson")
-    return jsonify(szlaki.__geo_interface__)
 
 @app.route("/search_peak", methods=["GET"])
 def search_peak():
@@ -222,119 +167,7 @@ def search_peak():
 
     return jsonify(result)
 
-@app.route("/api/route/segment", methods=["POST"])
-def plan_segment():
-    data = request.get_json()
-    start = data.get("from")
-    end = data.get("to")
 
-    if not start or not end:
-        return jsonify({"error": "Brakuje punktów start lub end"}), 400
-
-    route_points, distance, elevation_gain, elevation_loss = plan_route(start, end)
-
-    geojson_coords = [(lon, lat) for lat, lon in route_points]
-    geojson_feature = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": geojson_coords
-                },
-                "properties": {}
-            }
-        ]
-    }
-
-    return jsonify({
-        "route_points": route_points,
-        "distance": distance,
-        "elevation_gain": elevation_gain,
-        "elevation_loss": elevation_loss,
-        "routeGeoJson": geojson_feature
-    })
-
-@app.route("/api/route/trim", methods=["POST"])
-def trim_last_segment():
-    data = request.get_json()
-    points = data.get("points", [])
-
-    points = points[:-1]
-    full_features = []
-    total_distance = 0
-    total_gain = 0
-    total_loss = 0
-
-    for i in range(len(points) - 1):
-        seg_points, dist, gain, loss = plan_route(points[i], points[i+1])
-        total_distance += dist
-        total_gain += gain
-        total_loss += loss
-
-        coords = [(lon, lat) for lat, lon in seg_points]
-        full_features.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": coords
-            },
-            "properties": {}
-        })
-
-    return jsonify({
-        "routeGeoJson": {
-            "type": "FeatureCollection",
-            "features": full_features
-        },
-        "points": points,
-        "length": total_distance,
-        "elevationGain": total_gain,
-        "elevationLoss": total_loss
-    })
-
-@app.route('/api/route/elevation-profile', methods=['POST'])
-def elevation_profile():
-    data = request.get_json()
-    points = data.get('points', [])
-
-    if len(points) < 2:
-        return {"error": "Zbyt mało punktów"}, 400
-
-    elevations = []
-    distances = [0]
-
-    total_distance = 0
-    prev_lat, prev_lng = points[0]
-
-    ele = get_elevation(prev_lat, prev_lng)
-    elevations.append(ele)
-    for i in range(len(points) - 1):
-        seg_points, dist, gain, loss = plan_route(points[i], points[i + 1])
-        prev_lat, prev_lng = seg_points[0]
-        for lat, lng in seg_points[1:]:
-            ele = get_elevation(lat, lng)
-            elevations.append(ele)
-            segment_dist = geodesic((lat, lng), (prev_lat, prev_lng)).kilometers
-            total_distance += segment_dist
-            distances.append(total_distance)
-            prev_lat, prev_lng = lat, lng
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(distances, elevations, color='darkgreen', linewidth=2)
-    ax.set_title("Profil wysokości trasy")
-    ax.set_xlabel("Dystans (km)")
-    ax.set_ylabel("Wysokość (m)")
-    ax.grid(True)
-
-    img_io = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(img_io, format='png')
-    img_io.seek(0)
-    plt.close(fig)
-
-    return send_file(img_io, mimetype='image/png')
 @app.route("/pogoda/<location>")
 def weather(location):
     location = location.replace("_", " ")
@@ -427,8 +260,7 @@ def generate_forecast(location):
 def generate_danger(location):
     location = location.replace("_", " ")
     latitude, longitude = locations.get(location)
-    table,_ =danger_table(latitude, longitude)
-    return table
+    return danger_table(latitude, longitude)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -481,6 +313,145 @@ def logout():
     logout_user()
     flash("Wylogowano!", "info")
     return redirect(url_for("home"))
+
+@app.route('/api/markers/<int:marker_id>', methods=['PUT'])
+@login_required
+def update_marker(marker_id):
+    data = request.get_json()
+    marker = Marker.query.get_or_404(marker_id)
+
+    if marker.user_id != current_user.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    marker.name = data.get("name", marker.name)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route('/api/routes/<int:route_id>', methods=['PUT'])
+@login_required
+def update_route(route_id):
+    data = request.get_json()
+    route = Route.query.get_or_404(route_id)
+
+    if route.user_id != current_user.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    route.name = data.get("name", route.name)
+    route.description = data.get("description", route.description)
+    route.waypoints = data.get("waypoints", route.waypoints)
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/api/avalanche_markers', methods=['POST'])
+@login_required
+def add_avalanche_marker():
+    data = request.get_json()
+    new_marker = AvalancheMarker(
+        user_id=current_user.id,
+        latitude=data['latitude'],
+        longitude=data['longitude'],
+        description=data.get('description', ''),
+        created_at=datetime.now()
+    )
+    db.session.add(new_marker)
+    db.session.commit()
+    return jsonify({'message': 'Avalanche marker added successfully'}), 201
+
+
+@app.route('/api/avalanche_markers', methods=['GET'])
+def get_avalanche_markers():
+    markers = AvalancheMarker.query.order_by(AvalancheMarker.created_at.desc()).all()
+    return jsonify([{
+        'id': m.id,
+        'latitude': m.latitude,
+        'longitude': m.longitude,
+        'description': m.description,
+        'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+        'username': m.user.username
+    } for m in markers])
+
+
+@app.route("/api/nearest_avalanche", methods=["POST"])
+def nearest_avalanche():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    avalanches = AvalancheMarker.query.all()
+
+    if not avalanches:
+        return jsonify({"distance": None})  #Brak lawin
+
+    min_distance = min(
+        distance_avalanche(lat, lon, avalanche.latitude, avalanche.longitude)
+        for avalanche in avalanches
+    )
+
+    return jsonify({"distance": round(min_distance, 2)})
+
+@app.route("/api/avalanches_in_radius", methods=["POST"])
+def avalanches_in_radius():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    avalanches = AvalancheMarker.query.all()
+    number_of_avalanches = count_avalanches_in_radius(lat, lon, avalanches)
+
+    return jsonify({"number_of_avalanches": number_of_avalanches})
+
+
+@app.route('/plot_avalanche_chart', methods=['POST'])
+def plot_avalanche_chart():
+    data = request.get_json()
+    lat = data.get("lat")
+    lon = data.get("lon")
+    radius_km = data.get("radius", 2.0)
+    days = data.get("days", 30)
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Brak współrzędnych"}), 400
+
+    now = datetime.now()
+    start_date = now - timedelta(days=days)
+
+    avalanches = AvalancheMarker.query.filter(AvalancheMarker.created_at >= start_date).all()
+
+    #Dane dzienne
+    date_counts = { (start_date + timedelta(days=i)).strftime('%Y-%m-%d'): 0 for i in range(days + 1) }
+
+    for avalanche in avalanches:
+        distance = distance_avalanche(lat, lon, avalanche.latitude, avalanche.longitude)
+        if distance <= radius_km:
+            day = avalanche.created_at.strftime('%Y-%m-%d')
+            if day in date_counts:
+                date_counts[day] += 1
+
+    labels = list(date_counts.keys())
+    values = list(date_counts.values())
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(labels, values, marker='o', color='red')
+    ax.fill_between(labels, values, alpha=0.3, color='red')
+    ax.set_title("Liczba lawin w okolicy ({} km)".format(radius_km))
+    ax.set_xlabel("Data")
+    ax.set_ylabel("Liczba lawin")
+    ax.tick_params(axis='x', rotation=45)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close(fig)
+
+    return send_file(buf, mimetype='image/png')
 
 
 if __name__ == "__main__":
