@@ -108,7 +108,7 @@
         let routeControlsDiv = document.querySelector('.route-controls');
 
         function searchPeak() {
-            var peakName = document.getElementById('search-box').value;
+            const peakName = document.getElementById('search-box').value;
 
             if (!peakName) {
                 alert("Proszę wpisać nazwę szczytu.");
@@ -126,10 +126,10 @@
                         return;
                     }
 
-                    //Widok mapy
+                    // Ustaw widok mapy na znaleziony szczyt
                     map.setView([data.lat, data.lon], 13);
 
-                    //sprawdzam czy istnieje już taka pinezka
+                    // Sprawdź, czy marker już istnieje
                     const exists = markers.some(marker => {
                         const pos = marker.getLatLng();
                         return (
@@ -143,13 +143,12 @@
                         return;
                     }
 
-                    //Marker lokalnie tylko na mapie
+                    // Dodaj marker lokalnie
                     const newMarker = L.marker([data.lat, data.lon]).addTo(map);
-                    newMarker.bindPopup("<b>Trwa zapisywanie...</b><br><button disabled>Zapisywany</button>")
-                             .openPopup();
+                    newMarker.bindPopup("<b>Trwa zapisywanie...</b><br><button disabled>Zapisywany</button>").openPopup();
 
-                    // === Zapisz marker do bazy ===
-                    fetch('/api/markers', {
+                    // Zapisz marker do bazy
+                    return fetch('/api/markers', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -167,11 +166,11 @@
                         return response.json();
                     })
                     .then(apiData => {
-                        //po udanym zapisie aktualizujemy popup o ID markera
                         newMarker.setPopupContent(
                             `<b>${apiData.name || data.name}</b><br>ID: ${apiData.id}<br><button onclick="removeMarkerById(${apiData.id}, ${markers.length})">Usuń</button>`
                         );
                         markers.push(newMarker);
+                        loadMarkers(); // <- tylko po udanym zapisie
                     })
                     .catch(err => {
                         console.error("Zapis markeru nieudany:", err);
@@ -183,8 +182,8 @@
                     console.error("Wyszukiwanie szczytu nieudane:", error);
                     alert("Nie można znaleźć szczytu.");
                 });
-            loadMarkers();
         }
+
 
         function loadAvalancheChartImage(lat, lon) {
             fetch('/plot_avalanche_chart', {
@@ -324,6 +323,15 @@
                     li.onclick = () => {
                         map.fitBounds(line.getBounds());
                         line.openPopup();
+
+                        fetch(`/api/route/${route.id}/stats`)
+                          .then(res => res.json())
+                          .then(stats => {
+                              updateRouteInfo(stats.length, stats.elevationGain, stats.elevationLoss);
+                          })
+                          .catch(err => {
+                              console.error("Błąd ładowania statystyk trasy:", err);
+                          });
                     };
                     routeList.appendChild(li);
                 });
@@ -409,7 +417,7 @@
                 return;
             }
             addPoint(firstPoint[0],firstPoint[1])
-<!--            alert("Trasa została zamknięta (pętla).");-->
+                //alert("Trasa została zamknięta (pętla).");
             }
 
 function drawFullRoute(geoJson) {
@@ -717,6 +725,9 @@ map.on('click', function(e) {
             loadMarkers();
             loadRoutes();
             loadAvalancheMarkers();
+
+            avalancheControl.addTo(map);
+            hikingControl.addTo(map);
         });
 
 const avalancheControl = L.control({ position: 'topleft' });
