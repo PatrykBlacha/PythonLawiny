@@ -200,7 +200,7 @@ def generate_risk_map():
         slope = np.degrees(np.arctan(np.sqrt(dzdx**2 + dzdy**2)))
         aspect = (90 - np.degrees(np.arctan2(dzdy, dzdx))) % 360
 
-        risk_map = np.full_like(slope, 2**get_avalanche_risk_topr())
+        risk_map = np.full_like(slope, 2**3)
         risk_map[(slope > 35) & (slope < 40)] /= 2
         risk_map[(slope > 30) & (slope < 35)] /= 3
         risk_map[(slope < 30)] /= 4
