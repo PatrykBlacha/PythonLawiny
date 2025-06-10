@@ -15,7 +15,6 @@ from routes import plan_route, get_elevation
 @app.route('/api/markers', methods=['POST'])
 @login_required
 def add_marker():
-    # można sie pochwalic obsluga wyjatkow
     try:
         data = request.json
         new_marker = Marker(
@@ -37,7 +36,6 @@ def add_marker():
 @app.route('/api/routes', methods=['POST'])
 @login_required
 def add_route():
-    # tu tez moznaby dodac obsluge wyjatkow, jest juz w js ale lepiej miec kod w pythonie
     data = request.get_json()
     new_route = Route(
         user_id=current_user.id,

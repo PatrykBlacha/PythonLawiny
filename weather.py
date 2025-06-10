@@ -169,7 +169,7 @@ def get_forecast_plots(forecast, latitude, longitude,historical):
 
         if not historical:
 
-            ax3 = ax2.twinx()  # osobna skala dla prawdopodobieństwa opadów
+            ax3 = ax2.twinx()
             ax3.fill_between(forecast['date'], 0, forecast['precipitation_probability'], color='lightslategray', alpha=0.2,
                              label='Prawdopodobieństwo opadów')
             ax3.set_ylabel('Prawd. opadów (%)')

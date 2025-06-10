@@ -25,7 +25,7 @@ def extract_color(tags):
         color = symbol.split(":")[0]  # np. "green" z "green:white:green_bar"
 
     color = color.lower().strip()
-    return COLOR_MAP.get(color, "#888888")  # fallback: szary
+    return COLOR_MAP.get(color, "#888888")  # szary
 
 def get_elevation(lat,lon):
     with rasterio.open('static/NMT_tatry2.tif') as dem:
