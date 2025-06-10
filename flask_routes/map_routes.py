@@ -1,3 +1,5 @@
+import os
+
 import requests
 from flask import render_template, request, jsonify, send_file
 from flask_login import current_user, login_required
@@ -5,12 +7,15 @@ from geopy.distance import geodesic
 from matplotlib import pyplot as plt
 import io
 from datetime import timedelta, datetime
+import geopandas as gpd
 
 from __init__ import app, db, PNG_PATH
 from avalanche_statistics import distance_avalanche, count_avalanches_in_radius
 from models import Marker, Route, AvalancheMarker
-from routes import plan_route, get_elevation
+from routes import plan_route, get_elevation, get_routes_to_json
 
+if not os.path.exists("static/hiking_trails.geojson"):
+    get_routes_to_json()
 
 @app.route('/api/markers', methods=['POST'])
 @login_required
@@ -99,7 +104,7 @@ def delete_marker(marker_id):
 
 
 @app.route("/api/szlaki")
-def get_trails(gpd=None):
+def get_trails():
     szlaki = gpd.read_file("static/hiking_trails.geojson")
     return jsonify(szlaki.__geo_interface__)
 
