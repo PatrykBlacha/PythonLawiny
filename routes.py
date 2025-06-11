@@ -4,6 +4,7 @@ import rasterio
 from collections import defaultdict
 from geopy.distance import geodesic
 from scipy.spatial import KDTree
+from queue import PriorityQueue
 
 COLOR_MAP = {
     "red": "#ff0000",
@@ -11,21 +12,47 @@ COLOR_MAP = {
     "green": "#00aa00",
     "yellow": "#ffff00",
     "black": "#000000",
-    "white": "#ffffff",
-    "brown": "#8B4513",
-    "orange": "#FFA500"
 }
 
 
+with open("static/hiking_trails.geojson", encoding="utf-8") as f:
+    GEOJSON = json.load(f)
+
+GRAPH = defaultdict(list)
+NODES = set()
+
+for feature in GEOJSON["features"]:
+    geometry = feature["geometry"]
+    coords_list = []
+
+    if geometry["type"] == "LineString":
+        coords_list = [geometry["coordinates"]]
+    elif geometry["type"] == "MultiLineString":
+        coords_list = geometry["coordinates"]
+
+    for coords in coords_list:
+        for i in range(len(coords) - 1):
+            a = tuple(reversed(coords[i]))
+            b = tuple(reversed(coords[i + 1]))
+            dist = geodesic(a, b).kilometers
+            GRAPH[a].append((b, dist))
+            GRAPH[b].append((a, dist))
+            NODES.add(a)
+            NODES.add(b)
+
+NODES = list(NODES)
+NODE_TREE = KDTree(NODES)
+
+DEM = rasterio.open("static/NMT_tatry2.tif")
 def extract_color(tags):
     color = tags.get("colour", "")
 
     if not color and "osmc:symbol" in tags:
         symbol = tags["osmc:symbol"]
-        color = symbol.split(":")[0]  # np. "green" z "green:white:green_bar"
+        color = symbol.split(":")[0]
 
     color = color.lower().strip()
-    return COLOR_MAP.get(color, "#888888")  # szary
+    return COLOR_MAP.get(color, "#888888")
 
 def get_elevation(lat,lon):
     with rasterio.open('static/NMT_tatry2.tif') as dem:
@@ -106,36 +133,6 @@ def get_routes_to_json():
         json.dump(geojson_data, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-with open("static/hiking_trails.geojson", encoding="utf-8") as f:
-    GEOJSON = json.load(f)
-
-GRAPH = defaultdict(list)
-NODES = set()
-
-for feature in GEOJSON["features"]:
-    geometry = feature["geometry"]
-    coords_list = []
-
-    if geometry["type"] == "LineString":
-        coords_list = [geometry["coordinates"]]
-    elif geometry["type"] == "MultiLineString":
-        coords_list = geometry["coordinates"]
-
-    for coords in coords_list:
-        for i in range(len(coords) - 1):
-            a = tuple(reversed(coords[i]))
-            b = tuple(reversed(coords[i + 1]))
-            dist = geodesic(a, b).kilometers
-            GRAPH[a].append((b, dist))
-            GRAPH[b].append((a, dist))
-            NODES.add(a)
-            NODES.add(b)
-
-NODES = list(NODES)
-NODE_TREE = KDTree(NODES)
-
-DEM = rasterio.open("static/NMT_tatry2.tif")
-
 def get_elevation(lat, lon):
     try:
         row, col = DEM.index(lon, lat)
@@ -143,7 +140,6 @@ def get_elevation(lat, lon):
     except:
         return None
 
-from queue import PriorityQueue
 
 def heuristic(a, b):
     return geodesic(a, b).kilometers
