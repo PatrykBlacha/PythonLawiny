@@ -15,7 +15,7 @@ This web application provides a comprehensive toolset for mountain hikers and to
 *   **Backend:** Python 3, Flask
 *   **Database:** SQLite, SQLAlchemy (ORM)
 *   **Geospatial & Data Processing:** Rasterio (DEM processing), Pandas, NumPy
-*   **APIs:** Open-Meteo API (weather data)
+*   **APIs:** Open-Meteo API (weather), OpenStreetMap API (map)
 *   **Frontend:** HTML, CSS, JavaScript (Leaflet.js for interactive maps)
 
 ## Setup & Installation
@@ -35,25 +35,31 @@ To run this application locally, follow these steps:
     ```
 
 3.  **Install dependencies:**
-    *(Note: Ensure you have generated the `requirements.txt` file via `pip freeze > requirements.txt` if not present)*
     ```bash
     pip install -r requirements.txt
     ```
 
-4.  **Set up the Database:**
+4.  **Set up the environment variables:**
+    Copy the example environment file and customize it with your own values (especially important for production):
+    ```bash
+    cp .env.example .env
+    ```
+
+5.  **Set up the Database:**
     The application will automatically initialize the SQLite database on the first run.
 
-5.  **Run the application:**
+6.  **Run the application:**
     ```bash
     python main.py
     ```
 
-6.  **Access the application:**
+7.  **Access the application:**
     Open your web browser and navigate to `http://127.0.0.1:5000/`
 
 ## Project Structure Highlights
 
 *   `main.py`: The entry point of the Flask application.
+*   `__init__.py`: Application factory, configuration setup, and database initialization. Loads settings from `.env`.
 *   `routes.py`, `flask_routes/`: Contains all routing logic for web pages, map data, and user accounts.
 *   `models.py`: Defines the SQLAlchemy database models (`User`, `Route`, `Marker`).
 *   `avalanche_danger.py`: Core logic for calculating avalanche risks based on weather and terrain data.
@@ -61,6 +67,8 @@ To run this application locally, follow these steps:
 *   `static/`: Contains CSS, JavaScript, generated map images (`risk_map.png`), and GeoJSON data for hiking trails.
 *   `templates/`: Contains HTML templates for the frontend.
 
-## Important Note on Configuration
+## Configuration & Environment Variables
 
-For production environments, ensure that sensitive information (like `SECRET_KEY` and `SQLALCHEMY_DATABASE_URI`) is moved from the source code to a dedicated `config.py` file or managed via environment variables to maintain security best practices.
+This project follows the 12-Factor App methodology for configuration. All sensitive data and environment-specific settings (like database URIs and secret keys) are loaded from environment variables using `os.environ`. 
+
+For local development, these can be placed in a `.env` file (see `.env.example`). The application gracefully falls back to sensible defaults (like a local SQLite database) if these variables are not provided, ensuring a smooth developer experience.

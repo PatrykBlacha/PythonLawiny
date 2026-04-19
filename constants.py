@@ -4,11 +4,14 @@ EARTH_RADIUS_KM = 6371
 # Hiperparametry algorytmów
 AVALANCHE_SEARCH_RADIUS_KM = 1
 
-# Współrzędne geograficzne używane jako domyślne do sprawdzania ogólnego ryzyka (np. Tatry)
+# Szerokość geograficzna do obliczeń odległości na mapie- Tatry
+MAP_CALCULATION_LAT_DEG = 49.5
+
+# Współrzędne geograficzne używane jako domyślne do sprawdzania ogólnego ryzyka- Tatry
 DEFAULT_TATRAS_LAT = 49.2319
 DEFAULT_TATRAS_LON = 19.9817
 
-# Progi głębokości śniegu dla oceny zagrożenia (w cm)
+# Progi głębokości śniegu dla oceny zagrożenia [cm]
 SNOW_DEPTH_LEVEL_3 = 150
 SNOW_DEPTH_LEVEL_2 = 80
 SNOW_DEPTH_LEVEL_1_HIGH = 50

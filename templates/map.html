@@ -170,7 +170,7 @@
                             `<b>${apiData.name || data.name}</b><br>ID: ${apiData.id}<br><button onclick="removeMarkerById(${apiData.id}, ${markers.length})">Usuń</button>`
                         );
                         markers.push(newMarker);
-                        loadMarkers(); // <- tylko po udanym zapisie
+                        loadMarkers(); // tylko po udanym zapisie
                     })
                     .catch(err => {
                         console.error("Zapis markeru nieudany:", err);
@@ -205,7 +205,6 @@
 
 
 
-        // === WCZYTAJ MARKERY PRZY ŁADOWANIU STRONY ===
         function loadMarkers() {
             // Usuń istniejące markery z mapy
             markers.forEach(marker => map.removeLayer(marker));
@@ -220,7 +219,7 @@
                 dataArray.forEach((markerData) => {
                     const marker = L.marker([markerData.latitude, markerData.longitude]).addTo(map);
 
-                    // Przygotuj pusty popup DOM-owy
+                    //pusty popup DOM
                     const popupContent = document.createElement("div");
                     popupContent.innerHTML = `
                         <b>${markerData.name}</b><br>ID: ${markerData.id}
@@ -236,7 +235,7 @@
 
                     marker.bindPopup(popupContent).openPopup();
 
-                    // Asynchroniczne pobieranie danych o lawinach
+                    //asynchroniczne pobieranie danych o lawinach
                     Promise.all([
                         fetch('/api/nearest_avalanche', {
                             method: 'POST',
@@ -294,7 +293,6 @@
         }
 
 
-        // === WCZYTAJ TRASY PRZY ŁADOWANIU STRONY ===
         function loadRoutes() {
             fetch('/api/routes', { method: 'GET', credentials: 'include' })
             .then(response => response.json())
@@ -310,12 +308,12 @@
                     const li = document.createElement("li");
                     li.textContent = route.name;
 
-                    // Dodaj przycisk edycji ✏️
+                    // Dodaj przycisk edycji
                     const editBtn = document.createElement("button");
                     editBtn.textContent = "✏️";
                     editBtn.style.marginLeft = "10px";
                     editBtn.onclick = (e) => {
-                        e.stopPropagation(); // nie uruchamiaj kliknięcia w <li>
+                        e.stopPropagation();
                         editRouteName(route.id);
                     };
                     li.appendChild(editBtn);
@@ -344,7 +342,6 @@
         }
 
 
-        // === TRYB RYSOWANIA TRAS ===
         function toggleDrawMode() {
             drawingRoute = !drawingRoute;
             routeMarkers.forEach(marker => map.removeLayer(marker));
@@ -358,7 +355,7 @@
 
             if (drawingRoute) {
                 routeControlsDiv.style.display = 'inline-block';
-                saveRouteButton.style.display = 'inline-block';  // 👈 pokaż przycisk
+                saveRouteButton.style.display = 'inline-block';  // pokaż przycisk
                 alert("Tryb rysowania trasy aktywny.\nKliknij na mapie, aby dodać punkty.");
                 totalLength = 0;
                 totalElevationGain = 0;
@@ -370,7 +367,7 @@
                 currentPolyline = L.polyline([], { color: 'red' }).addTo(map);
             } else {
                 routeControlsDiv.style.display = 'none';
-                saveRouteButton.style.display = 'none';  // 👈 ukryj przycisk
+                saveRouteButton.style.display = 'none';  // ukryj przycisk
                 if (confirm("Czy chcesz zapisać tę trasę?")) {
                     saveCurrentRoute();
                 } else {
@@ -384,7 +381,6 @@
         }
 
 
-        // === USUŃ OSTATNI PUNKT ===
         function removeLastPoint() {
             if (routePoints.length > 0) {
                 const marker = routeMarkers.pop();
@@ -395,7 +391,6 @@
             }
         }
 
-        // === ZAMKNIJ TRASĘ (DODAJ PIERWSZY PUNKT NA KONIEC) ===
         function closeRouteLoop() {
             if (!currentPolyline) {
                 alert("Rozpocznij najpierw trasę!");
@@ -411,7 +406,6 @@
             const lastPoint = routePoints[routePoints.length - 1];
 
 
-            // Sprawdź, czy już zamknięta
             if (firstPoint[0] === lastPoint[0] && firstPoint[1] === lastPoint[1]) {
                 alert("Trasa jest już zamknięta.");
                 return;
@@ -427,9 +421,9 @@ function drawFullRoute(geoJson) {
 
     currentPolyline = L.geoJSON(geoJson, {
         style: {
-            color: '#333',        // ciemnoszary kolor
-            weight: 8,            // grubość linii
-            dashArray: '8, 10'    // przerywana linia
+            color: '#333',
+            weight: 8,
+            dashArray: '8, 10'
         }
     }).addTo(map);
 }
@@ -464,8 +458,6 @@ function removeLastSegment() {
     });
 }
 
-
-        // === ZAPISZ TRASĘ === //
         function saveCurrentRoute() {
             if (routePoints.length < 2) {
                 alert("Trasa musi mieć co najmniej 2 punkty.");
@@ -492,7 +484,7 @@ function removeLastSegment() {
             })
             .then(() => {
                 alert("Trasa została zapisana!");
-                map.removeLayer(currentPolyline); // usuń starą trasę (czerwoną)
+                map.removeLayer(currentPolyline); // usuń starą trasę
                 currentPolyline = null;
                 routePoints = [];
 
@@ -509,8 +501,6 @@ function removeLastSegment() {
             });
         }
 
-
-        // === RYSOWANIE TRASY / DODAWANIE MARKERÓW === technicznie rzecz biorą po prostu obsługa kliknięcia //
 
 function updateRouteInfo(length, gain, loss) {
     document.getElementById('route-length').textContent = `${length.toFixed(2)} km`;
@@ -688,7 +678,6 @@ map.on('click', function(e) {
         }
 
 
-        // === USUŃ TRASĘ PO ID ===
         function removeRouteById(routeId) {
             if (!confirm("Czy na pewno chcesz usunąć tę trasę?")) return;
 
@@ -720,7 +709,7 @@ map.on('click', function(e) {
             .finally(() => loadRoutes());
         }
 
-        //=== STARTOWE WCZYTYWANIE === podobno potrzebne w js
+        //startowe wczytanie
         document.addEventListener("DOMContentLoaded", () => {
             loadMarkers();
             loadRoutes();
@@ -792,7 +781,7 @@ avalancheControl.onAdd = function (map) {
         }
 
 
-// === KONTROLKA SZLAKÓW ===
+//kontrola szlaków
 const hikingControl = L.control({ position: 'topleft' });
 let hikingTrailsLayer = null;
 let hikingVisible = false;
@@ -848,7 +837,6 @@ hikingControl.onAdd = function (map) {
 hikingControl.addTo(map);
 
 
-// === PROFIL WYSOKOŚCI TRASY ===
 function loadElevationChart() {
     fetch('/api/route/elevation-profile', {
         method: 'POST',
@@ -873,7 +861,6 @@ function loadElevationChart() {
 }
 
 
-// === EDYCJA NAZWY TRASY ===
 function editRouteName(routeId) {
     const newName = prompt("Podaj nową nazwę trasy:");
     if (!newName) return;
