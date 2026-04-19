@@ -49,7 +49,8 @@ def extract_color(tags):
 
     if not color and "osmc:symbol" in tags:
         symbol = tags["osmc:symbol"]
-        color = symbol.split(":")[0]
+        color = symbol.split(":")[0]  #"green" z "green:white:green_bar"
+
 
     color = color.lower().strip()
     return COLOR_MAP.get(color, "#888888")
@@ -57,7 +58,6 @@ def extract_color(tags):
 def get_elevation(lat,lon):
     with rasterio.open('static/NMT_tatry2.tif') as dem:
         try:
-            # rasterio używa (lon, lat) – odwrotna kolejność
             row, col = dem.index(lon, lat)
             elevation = dem.read(1)[row, col]
             return float(elevation)

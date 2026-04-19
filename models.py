@@ -15,7 +15,7 @@ class Route(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    waypoints = db.Column(JSON, nullable=False)  # JSON string
+    waypoints = db.Column(JSON, nullable=False)
 
 class MarkerBase(db.Model):
     __abstract__ = True

@@ -8,6 +8,11 @@ import pandas as pd
 import rasterio
 import numpy as np
 from weather import current_weather
+from constants import (
+    DEFAULT_TATRAS_LAT, DEFAULT_TATRAS_LON,
+    SNOW_DEPTH_LEVEL_3, SNOW_DEPTH_LEVEL_2, SNOW_DEPTH_LEVEL_1_HIGH, SNOW_DEPTH_LEVEL_1_LOW,
+    WET_SNOW_RAIN_SUM_THRESHOLD, WET_SNOW_TEMP_MAX_THRESHOLD, MAP_CALCULATION_LAT_DEG
+)
 
 PNG_PATH='static/risk_map.png'
 
@@ -141,28 +146,24 @@ def danger_table(latitude,longitude):
 
 TOPR_URL = "https://lawiny.topr.pl"
 def get_avalanche_risk_topr():
-    # wyznaczone na podstawie grubosci pokrywy snieznej na kasprowym wierchu i czynników zwiększających zagrożenie
-    # nie jest to żaden użyteczny wzór,
-    # jest użyty tylko w celu zasymulowania danych, które docelowo powinny być udostępniane przez topr
-    _,_,_,snow_depth = current_weather(49.2319,19.9817)
-    _,add=danger_table(49.2319,19.9817)
-    if snow_depth>150:
+    _,_,_,snow_depth = current_weather(DEFAULT_TATRAS_LAT, DEFAULT_TATRAS_LON)
+    _,add=danger_table(DEFAULT_TATRAS_LAT, DEFAULT_TATRAS_LON)
+    if snow_depth>SNOW_DEPTH_LEVEL_3:
         return 3 + add
-    elif snow_depth>80:
+    elif snow_depth>SNOW_DEPTH_LEVEL_2:
         return 2 + add
-    elif snow_depth>50:
+    elif snow_depth>SNOW_DEPTH_LEVEL_1_HIGH:
         return 1+add
-    elif snow_depth>30:
+    elif snow_depth>SNOW_DEPTH_LEVEL_1_LOW:
         return 1 + add//2
     else:
         return 0
 
 def is_snow_wet():
-    # moznaby uwzglednic wysokosc npm
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
-        "latitude": 49.2319,
-        "longitude": 19.9817,
+        "latitude": DEFAULT_TATRAS_LAT,
+        "longitude": DEFAULT_TATRAS_LON,
         "daily": ["temperature_2m_max", "rain_sum"],
         "timezone": "auto",
         "forecast_days": 1
@@ -172,7 +173,7 @@ def is_snow_wet():
     daily = response.Daily()
     daily_temperature_2m_max = daily.Variables(0).ValuesAsNumpy()
     daily_rain_sum = daily.Variables(1).ValuesAsNumpy()
-    if daily_rain_sum>3 or daily_temperature_2m_max>0:
+    if daily_rain_sum>WET_SNOW_RAIN_SUM_THRESHOLD or daily_temperature_2m_max>WET_SNOW_TEMP_MAX_THRESHOLD:
         return True
     return False
 
@@ -184,7 +185,7 @@ def generate_risk_map():
         res_x = abs(transform.a)
         res_y = abs(transform.e)
 
-        lat_deg = 49.5
+        lat_deg = MAP_CALCULATION_LAT_DEG
         lat_rad = np.radians(lat_deg)
 
         meters_per_degree_lat = 111_320

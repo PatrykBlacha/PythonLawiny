@@ -173,6 +173,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
-#DODAJĘ TO RĘCZNIE BO CHYBA NIE CHCEMY TEGO FOLDERU, UWAGA!!!
 .idea/
+static/plots/
